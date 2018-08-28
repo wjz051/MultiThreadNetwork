@@ -11,7 +11,9 @@
 enum CMD
 {
 	CMD_LOGIN,
+	CMD_LOGIN_RESULT,
 	CMD_LOGOUT,
+	CMD_LOGOUT_RESULT,
 	CMD_ERROR
 };
 struct DataHeader
@@ -20,27 +22,47 @@ struct DataHeader
 	short cmd;//命令
 };
 //DataPackage
-struct Login
+struct Login: public DataHeader
 {
+	Login()
+	{
+		dataLength = sizeof(Login);
+		cmd = CMD_LOGIN;
+	}
 	char userName[32];
 	char PassWord[32];
 };
 
-struct LoginResult
+struct LoginResult : public DataHeader
 {
+	LoginResult()
+	{
+		dataLength = sizeof(LoginResult);
+		cmd = CMD_LOGIN_RESULT;
+		result = 0;
+	}
 	int result;
-
 };
 
-struct Logout
+struct Logout : public DataHeader
 {
+	Logout()
+	{
+		dataLength = sizeof(Logout);
+		cmd = CMD_LOGOUT;
+	}
 	char userName[32];
 };
 
-struct LogoutResult
+struct LogoutResult : public DataHeader
 {
+	LogoutResult()
+	{
+		dataLength = sizeof(LogoutResult);
+		cmd = CMD_LOGIN_RESULT;
+		result = 0;
+	}
 	int result;
-
 };
 
 int main()
@@ -100,32 +122,25 @@ int main()
 			printf("客户端已退出，任务结束。");
 			break;
 		}
-		printf("收到命令：%d 数据长度：%d\n", header.cmd, header.dataLength);
 		switch (header.cmd)
 		{
 			case CMD_LOGIN:
 				{
 					Login login = {};
-					recv(_cSock, (char*)&login, sizeof(Login), 0);
+					recv(_cSock, (char*)&login+sizeof(DataHeader), sizeof(Login)-sizeof(DataHeader), 0);
+					printf("收到命令：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", login.dataLength, login.userName, login.PassWord);
 					//忽略判断用户密码是否正确的过程
-
-					printf("账号：%s，密码：%s，登录成功！\n", login.userName, login.PassWord);
-
-					LoginResult ret = {1};
-					send(_cSock, (char*)&header, sizeof(DataHeader), 0);
+					LoginResult ret;
 					send(_cSock, (char*)&ret, sizeof(LoginResult), 0);
 				}
 				break;
 			case CMD_LOGOUT:
 				{
 					Logout logout = {};
-					recv(_cSock, (char*)&logout, sizeof(logout), 0);
+					recv(_cSock, (char*)&logout+sizeof(DataHeader), sizeof(logout)- sizeof(DataHeader), 0);
+					printf("收到命令：CMD_LOGOUT,数据长度：%d,userName=%s \n", logout.dataLength, logout.userName);
 					//忽略判断用户密码是否正确的过程
-
-					printf("账号：%s，退出成功！\n", logout.userName);
-
-					LogoutResult ret = { 1 };
-					send(_cSock, (char*)&header, sizeof(header), 0);
+					LogoutResult ret;
 					send(_cSock, (char*)&ret, sizeof(ret), 0);
 				}
 				break;
