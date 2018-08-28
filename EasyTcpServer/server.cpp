@@ -7,6 +7,7 @@
 
 #pragma comment(lib,"ws2_32.lib")
 
+/*命令*/
 enum CMD
 {
 	CMD_LOGIN,
@@ -15,8 +16,8 @@ enum CMD
 };
 struct DataHeader
 {
-	short dataLength;
-	short cmd;
+	short dataLength;//数据长度
+	short cmd;//命令
 };
 //DataPackage
 struct Login
@@ -107,6 +108,9 @@ int main()
 					Login login = {};
 					recv(_cSock, (char*)&login, sizeof(Login), 0);
 					//忽略判断用户密码是否正确的过程
+
+					printf("账号：%s，密码：%s，登录成功！\n", login.userName, login.PassWord);
+
 					LoginResult ret = {1};
 					send(_cSock, (char*)&header, sizeof(DataHeader), 0);
 					send(_cSock, (char*)&ret, sizeof(LoginResult), 0);
@@ -117,6 +121,9 @@ int main()
 					Logout logout = {};
 					recv(_cSock, (char*)&logout, sizeof(logout), 0);
 					//忽略判断用户密码是否正确的过程
+
+					printf("账号：%s，退出成功！\n", logout.userName);
+
 					LogoutResult ret = { 1 };
 					send(_cSock, (char*)&header, sizeof(header), 0);
 					send(_cSock, (char*)&ret, sizeof(ret), 0);
@@ -128,7 +135,6 @@ int main()
 				send(_cSock, (char*)&header, sizeof(header), 0);
 			break;
 		}
-\
 	}
 	// 8 关闭套节字closesocket
 	closesocket(_sock);
