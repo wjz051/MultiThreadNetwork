@@ -8,11 +8,41 @@
 
 #pragma comment(lib,"ws2_32.lib")
 
-struct DataPackage
+enum CMD
 {
-	int age;
-	char name[32];
+	CMD_LOGIN,
+	CMD_LOGOUT,
+	CMD_ERROR
 };
+struct DataHeader
+{
+	short dataLength;
+	short cmd;
+};
+//DataPackage
+struct Login
+{
+	char userName[32];
+	char PassWord[32];
+};
+
+struct LoginResult
+{
+	int result;
+
+};
+
+struct Logout
+{
+	char userName[32];
+};
+
+struct LogoutResult
+{
+	int result;
+
+};
+
 
 int main()
 {
@@ -36,7 +66,7 @@ int main()
 	_sin.sin_family = AF_INET;
 	_sin.sin_port = htons(4567);
 	_sin.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
-	int ret = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
+	int ret  = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
 	if (SOCKET_ERROR == ret)
 	{
 		printf("错误，连接服务器失败...\n");
@@ -45,30 +75,45 @@ int main()
 		printf("连接服务器成功...\n");
 	}
 
-
+	
 	while (true)
 	{
 		//3输入请求命令
 		char cmdBuf[128] = {};
-		scanf("%s", cmdBuf);
+		scanf("%s",cmdBuf);
 		//4 处理请求命令
 		if (0 == strcmp(cmdBuf, "exit"))
 		{
-			printf("收到exit命令，任务结束。");
+			printf("收到exit命令，任务结束。\n");
 			break;
+		}else if (0 == strcmp(cmdBuf, "login")) {
+			Login login = {"lyd","lydmm"};
+			DataHeader dh = { sizeof(login),CMD_LOGIN};
+			//5 向服务器发送请求命令
+			send(_sock, (const char *)&dh, sizeof(dh), 0);
+			send(_sock, (const char *)&login, sizeof(login), 0);
+			// 接收服务器返回的数据
+			DataHeader retHeader = {};
+			LoginResult loginRet = {};
+			recv(_sock, (char*)&retHeader, sizeof(retHeader), 0);
+			recv(_sock, (char*)&loginRet, sizeof(loginRet), 0);
+			printf("LoginResult: %d \n", loginRet.result);
+		}
+		else if (0 == strcmp(cmdBuf, "logout")) {
+			Logout logout = { "lyd" };
+			DataHeader dh = { sizeof(logout), CMD_LOGOUT };
+			//5 向服务器发送请求命令
+			send(_sock, (const char *)&dh, sizeof(dh), 0);
+			send(_sock, (const char *)&logout, sizeof(logout), 0);
+			// 接收服务器返回的数据
+			DataHeader retHeader = {};
+			LogoutResult logoutRet = {};
+			recv(_sock, (char*)&retHeader, sizeof(retHeader), 0);
+			recv(_sock, (char*)&logoutRet, sizeof(logoutRet), 0);
+			printf("LogoutResult: %d \n", logoutRet.result);
 		}
 		else {
-			//5 向服务器发送请求命令
-			send(_sock, cmdBuf, strlen(cmdBuf) + 1, 0);
-		}
-
-		// 6 接收服务器信息 recv
-		char recvBuf[128] = {};
-		int nlen = recv(_sock, recvBuf, 128, 0);
-		if (nlen > 0)
-		{
-			DataPackage* dp = (DataPackage*)recvBuf;
-			printf("接收到数据：年龄=%d ，姓名=%s\n", dp->age, dp->name);
+			printf("不支持的命令，请重新输入。\n");
 		}
 	}
 	// 7 关闭套节字closesocket
