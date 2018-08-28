@@ -29,7 +29,7 @@ int main()
 		printf("错误，建立Socket失败...\n");
 	}
 	else {
-		printf("建立Socket成功...\n");
+		printf("建立Socket成功...socket=%d\n",(int)_sock);
 	}
 	// 2 连接服务器 connect
 	sockaddr_in _sin = {};

@@ -24,6 +24,8 @@ int main()
 	//-- 用Socket API建立简易TCP服务端
 	// 1 建立一个socket 套接字
 	SOCKET _sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	printf("服务器socket=%d\n", (int)_sock);
+
 	// 2 bind 绑定用于接受客户端连接的网络端口
 	sockaddr_in _sin = {};
 	_sin.sin_family = AF_INET;
