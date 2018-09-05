@@ -5,6 +5,7 @@
 #include<windows.h>
 #include<WinSock2.h>
 #include<stdio.h>
+#include<thread>
 
 #pragma comment(lib,"ws2_32.lib")
 
@@ -97,14 +98,14 @@ int processor(SOCKET _cSock)
 		{
 			recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
 			LoginResult* login = (LoginResult*)szRecv;
-			printf("客户端<Socket=%d>收到服务端消息：CMD_LOGIN_RESULT,数据长度：%d\n", _cSock, login->dataLength);
+			printf("收到服务端消息：CMD_LOGIN_RESULT,数据长度：%d\n", login->dataLength);
 		}
 		break;
 		case CMD_LOGOUT_RESULT:
 		{
 			recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
 			LogoutResult* logout = (LogoutResult*)szRecv;
-			printf("客户端<Socket=%d>收到服务端消息：CMD_LOGOUT_RESULT,数据长度：%d\n", _cSock, logout->dataLength);
+			printf("收到服务端消息：CMD_LOGOUT_RESULT,数据长度：%d\n", logout->dataLength);
 		}
 		break;
 		case CMD_NEW_USER_JOIN:
@@ -116,6 +117,37 @@ int processor(SOCKET _cSock)
 		break;
 	}
 	return 0;
+}
+bool g_bRun = true;
+void cmdThread(SOCKET sock)
+{
+	while (true)
+	{
+		char cmdBuf[256] = {};
+		scanf("%s", cmdBuf);
+		if (0 == strcmp(cmdBuf, "exit"))
+		{
+			g_bRun = false;
+			printf("退出cmdThread线程\n");
+			break;
+		}
+		else if (0 == strcmp(cmdBuf, "login"))
+		{
+			Login login;
+			strcpy(login.userName, "lyd");
+			strcpy(login.PassWord, "lydmm");
+			send(sock, (const char*)&login, sizeof(Login), 0);
+		}
+		else if (0 == strcmp(cmdBuf, "logout"))
+		{
+			Logout logout;
+			strcpy(logout.userName, "lyd");
+			send(sock, (const char*)&logout, sizeof(Logout), 0);
+		}
+		else {
+			printf("不支持的命令。\n");
+		}
+	}
 }
 
 int main()
@@ -148,9 +180,11 @@ int main()
 	else {
 		printf("连接服务器成功...\n");
 	}
+	//启动线程
+	std::thread t1(cmdThread,_sock);
+	t1.detach();
 
-	
-	while (true)
+	while (g_bRun)
 	{
 		fd_set fdReads;
 		FD_ZERO(&fdReads);
@@ -172,12 +206,9 @@ int main()
 				break;
 			}
 		}
-		
-		printf("空闲时间处理其它业务..\n");
-		Login login;
-		strcpy(login.userName, "lyd");
-		strcpy(login.PassWord, "lyd");
-		send(_sock, (const char*)&login, sizeof(Login), 0);
+
+		//printf("空闲时间处理其它业务..\n");
+
 		//Sleep(1000);
 	}
 	// 7 关闭套节字closesocket
