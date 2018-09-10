@@ -1,13 +1,20 @@
-#define WIN32_LEAN_AND_MEAN
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
-#define _CRT_SECURE_NO_WARNINGS
+#ifdef _WIN32
+	#define WIN32_LEAN_AND_MEAN
+	#include<windows.h>
+	#include<WinSock2.h>
+	#pragma comment(lib,"ws2_32.lib")
+#else
+	#include<unistd.h> //uni std
+	#include<arpa/inet.h>
+	#include<string.h>
 
-#include<windows.h>
-#include<WinSock2.h>
+	#define SOCKET int
+	#define INVALID_SOCKET  (SOCKET)(~0)
+	#define SOCKET_ERROR            (-1)
+#endif
+
 #include<stdio.h>
 #include<thread>
-
-#pragma comment(lib,"ws2_32.lib")
 
 enum CMD
 {
@@ -85,36 +92,36 @@ int processor(SOCKET _cSock)
 	//缓冲区
 	char szRecv[4096] = {};
 	// 5 接收客户端数据
-	int nLen = recv(_cSock, szRecv, sizeof(DataHeader), 0);
+	int nLen = (int)recv(_cSock, szRecv, sizeof(DataHeader), 0);
 	DataHeader* header = (DataHeader*)szRecv;
 	if (nLen <= 0)
 	{
-		printf("客户端<Socket=%d>与服务器断开连接，任务结束。\n", _cSock);
+		printf("与服务器断开连接，任务结束。\n");
 		return -1;
 	}
 	switch (header->cmd)
 	{
-		case CMD_LOGIN_RESULT:
-		{
-			recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-			LoginResult* login = (LoginResult*)szRecv;
-			printf("收到服务端消息：CMD_LOGIN_RESULT,数据长度：%d\n", login->dataLength);
-		}
-		break;
-		case CMD_LOGOUT_RESULT:
-		{
-			recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-			LogoutResult* logout = (LogoutResult*)szRecv;
-			printf("收到服务端消息：CMD_LOGOUT_RESULT,数据长度：%d\n", logout->dataLength);
-		}
-		break;
-		case CMD_NEW_USER_JOIN:
-		{
-			recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
-			NewUserJoin* userJoin = (NewUserJoin*)szRecv;
-			printf("客户端<Socket=%d>收到服务端消息：CMD_NEW_USER_JOIN,数据长度：%d\n", _cSock, userJoin->dataLength);
-		}
-		break;
+	case CMD_LOGIN_RESULT:
+	{
+		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+		LoginResult* login = (LoginResult*)szRecv;
+		printf("收到服务端消息：CMD_LOGIN_RESULT,数据长度：%d\n", login->dataLength);
+	}
+	break;
+	case CMD_LOGOUT_RESULT:
+	{
+		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+		LogoutResult* logout = (LogoutResult*)szRecv;
+		printf("收到服务端消息：CMD_LOGOUT_RESULT,数据长度：%d\n", logout->dataLength);
+	}
+	break;
+	case CMD_NEW_USER_JOIN:
+	{
+		recv(_cSock, szRecv + sizeof(DataHeader), header->dataLength - sizeof(DataHeader), 0);
+		NewUserJoin* userJoin = (NewUserJoin*)szRecv;
+		printf("收到服务端消息：CMD_NEW_USER_JOIN,数据长度：%d\n", userJoin->dataLength);
+	}
+	break;
 	}
 	return 0;
 }
@@ -152,10 +159,12 @@ void cmdThread(SOCKET sock)
 
 int main()
 {
+#ifdef _WIN32
 	//启动Windows socket 2.x环境
 	WORD ver = MAKEWORD(2, 2);
 	WSADATA dat;
 	WSAStartup(ver, &dat);
+#endif
 	//------------
 	//-- 用Socket API建立简易TCP客户端
 	// 1 建立一个socket
@@ -171,8 +180,12 @@ int main()
 	sockaddr_in _sin = {};
 	_sin.sin_family = AF_INET;
 	_sin.sin_port = htons(4567);
+#ifdef _WIN32
 	_sin.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");
-	int ret  = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
+#else
+	_sin.sin_addr.s_addr = inet_addr("192.168.74.1");
+#endif
+	int ret = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
 	if (SOCKET_ERROR == ret)
 	{
 		printf("错误，连接服务器失败...\n");
@@ -181,7 +194,7 @@ int main()
 		printf("连接服务器成功...\n");
 	}
 	//启动线程
-	std::thread t1(cmdThread,_sock);
+	std::thread t1(cmdThread, _sock);
 	t1.detach();
 
 	while (g_bRun)
@@ -189,8 +202,8 @@ int main()
 		fd_set fdReads;
 		FD_ZERO(&fdReads);
 		FD_SET(_sock, &fdReads);
-		timeval t = {1,0};
-		int ret = select(_sock, &fdReads, 0, 0, &t);
+		timeval t = { 1,0 };
+		int ret = select(_sock + 1, &fdReads, 0, 0, &t);
 		if (ret < 0)
 		{
 			printf("select任务结束1\n");
@@ -212,9 +225,13 @@ int main()
 		//Sleep(1000);
 	}
 	// 7 关闭套节字closesocket
+#ifdef _WIN32
 	closesocket(_sock);
 	//清除Windows socket环境
 	WSACleanup();
+#else
+	close(_sock);
+#endif
 	printf("已退出。\n");
 	getchar();
 	return 0;
