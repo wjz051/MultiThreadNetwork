@@ -56,7 +56,7 @@ public:
 	}
 
 	//连接服务器
-	int Connect(char* ip,unsigned short port)
+	int Connect(const char* ip,unsigned short port)
 	{
 		if (INVALID_SOCKET == _sock)
 		{
@@ -106,6 +106,7 @@ public:
 			fd_set fdReads;
 			FD_ZERO(&fdReads);
 			FD_SET(_sock, &fdReads);
+
 			timeval t = { 1,0 };
 			int ret = select(_sock + 1, &fdReads, 0, 0, &t);
 			if (ret < 0)
@@ -113,6 +114,7 @@ public:
 				printf("<socket=%d>select任务结束1\n", _sock);
 				return false;
 			}
+
 			if (FD_ISSET(_sock, &fdReads))
 			{
 				FD_CLR(_sock, &fdReads);

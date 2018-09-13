@@ -13,8 +13,8 @@ enum CMD
 
 struct DataHeader
 {
-	short dataLength;
-	short cmd;
+	short dataLength;//数据长度
+	short cmd;//命令
 };
 
 //DataPackage
