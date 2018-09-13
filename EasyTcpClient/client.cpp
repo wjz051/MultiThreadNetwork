@@ -35,22 +35,24 @@ void cmdThread(EasyTcpClient* client)
 
 int main()
 {
-
-	EasyTcpClient client;
-	client.Connect("127.0.0.1", 4567);
+	EasyTcpClient client1;
+	client1.Connect("127.0.0.1", 4567);
 
 	//启动UI线程
-	std::thread t1(cmdThread, &client);
+	std::thread t1(cmdThread, &client1);
 	t1.detach();
 
-
-	while (client.isRun())
+	Login login;
+	strcpy(login.userName, "lyd");
+	strcpy(login.PassWord, "lydmm");
+	while (client1.isRun())
 	{
-		client.OnRun();
+		client1.OnRun();
+		client1.SendData(&login);
 		//printf("空闲时间处理其它业务..\n");
 		//Sleep(1000);
 	}
-	client.Close();
+	client1.Close();
 
 	printf("已退出。\n");
 	getchar();

@@ -1,5 +1,5 @@
-#ifndef __MessageHeader_H__
-#define __MessageHeader_H__
+#ifndef _MessageHeader_hpp_
+#define _MessageHeader_hpp_
 
 enum CMD
 {
@@ -13,8 +13,8 @@ enum CMD
 
 struct DataHeader
 {
-	short dataLength;//数据长度
-	short cmd;//命令
+	short dataLength;
+	short cmd;
 };
 
 //DataPackage
@@ -38,6 +38,7 @@ struct LoginResult : public DataHeader
 		result = 0;
 	}
 	int result;
+	char data[1024];
 };
 
 struct Logout : public DataHeader
@@ -72,4 +73,4 @@ struct NewUserJoin : public DataHeader
 	int scok;
 };
 
-#endif // __MessageHeader_H__
+#endif // !_MessageHeader_hpp_
