@@ -139,13 +139,16 @@ public:
 		return _sock != INVALID_SOCKET;
 	}
 	//缓冲区最小单元大小
-#define RECV_BUFF_SZIE 10240
-	//接收缓冲区
-	char _szRecv[RECV_BUFF_SZIE] = {};
+#ifndef RECV_BUFF_SZIE
+#define RECV_BUFF_SZIE 102400
+#endif // !RECV_BUFF_SZIE
 	//第二缓冲区 消息缓冲区
-	char _szMsgBuf[RECV_BUFF_SZIE*10] = {};
+	char _szMsgBuf[RECV_BUFF_SZIE * 10] = {};
 	//消息缓冲区的数据尾部位置
 	int _lastPos = 0;
+	//接收缓冲区
+	char _szRecv[RECV_BUFF_SZIE] = {};
+
 	//接收数据 处理粘包 拆分包
 	int RecvData(SOCKET cSock)
 	{
