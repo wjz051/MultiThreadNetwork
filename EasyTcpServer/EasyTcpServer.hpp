@@ -348,7 +348,7 @@ public:
 		auto t1 = _tTime.getElapsedSecond();
 		if (t1 >= 1.0)
 		{
-			printf("time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", t1, _sock,_clients.size(), _recvCount);
+			printf("time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", t1, cSock,_clients.size(), _recvCount);
 			_recvCount = 0;
 			_tTime.update();
 		}

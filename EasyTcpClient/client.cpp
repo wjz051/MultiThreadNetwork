@@ -39,7 +39,7 @@ int main()
 		{
 			return 0;
 		}
-		client[n]->Connect("192.168.74.1", 4567);
+		client[n]->Connect("127.0.0.1", 4567);
 		printf("Connect=%d\n", n);
 	}
 
