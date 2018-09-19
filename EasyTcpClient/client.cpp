@@ -22,16 +22,25 @@ void cmdThread()
 
 int main()
 {
-	const int cCount = FD_SETSIZE-1;
+	const int cCount = 1000;
 	EasyTcpClient* client[cCount];
 
 	for (int n = 0; n < cCount; n++)
 	{
+		if (!g_bRun)
+		{
+			return 0;
+		}
 		client[n] = new EasyTcpClient();
 	}
 	for (int n = 0; n < cCount; n++)
 	{
-		client[n]->Connect("127.0.0.1", 4567);
+		if (!g_bRun)
+		{
+			return 0;
+		}
+		client[n]->Connect("192.168.74.1", 4567);
+		printf("Connect=%d\n", n);
 	}
 
 	//启动UI线程
@@ -46,11 +55,8 @@ int main()
 		for (int n = 0; n < cCount; n++)
 		{
 			client[n]->SendData(&login);
-			client[n]->OnRun();
+			//client[n]->OnRun();
 		}
-		
-		//printf("空闲时间处理其它业务..\n");
-		//Sleep(1000);
 	}
 
 	for (int n = 0; n < cCount; n++)
@@ -59,6 +65,5 @@ int main()
 	}
 
 	printf("已退出。\n");
-	getchar();
 	return 0;
 }

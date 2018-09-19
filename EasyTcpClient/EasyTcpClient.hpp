@@ -51,7 +51,7 @@ public:
 			printf("错误，建立Socket失败...\n");
 		}
 		else {
-			printf("建立Socket=<%d>成功...\n", _sock);
+			//printf("建立Socket=<%d>成功...\n", _sock);
 		}
 	}
 
@@ -71,14 +71,14 @@ public:
 #else
 		_sin.sin_addr.s_addr = inet_addr(ip);
 #endif
-		printf("<socket=%d>正在连接服务器<%s:%d>...\n", _sock, ip, port);
+		//printf("<socket=%d>正在连接服务器<%s:%d>...\n", _sock, ip, port);
 		int ret = connect(_sock, (sockaddr*)&_sin, sizeof(sockaddr_in));
 		if (SOCKET_ERROR == ret)
 		{
 			printf("<socket=%d>错误，连接服务器<%s:%d>失败...\n",_sock, ip, port);
 		}
 		else {
-			printf("<socket=%d>连接服务器<%s:%d>成功...\n",_sock, ip, port);
+			//printf("<socket=%d>连接服务器<%s:%d>成功...\n",_sock, ip, port);
 		}
 		return ret;
 	}
@@ -140,7 +140,7 @@ public:
 	}
 	//缓冲区最小单元大小
 #ifndef RECV_BUFF_SZIE
-#define RECV_BUFF_SZIE 102400
+#define RECV_BUFF_SZIE 10240
 #endif // !RECV_BUFF_SZIE
 	//第二缓冲区 消息缓冲区
 	char _szMsgBuf[RECV_BUFF_SZIE * 10] = {};

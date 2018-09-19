@@ -2,6 +2,7 @@
 #define _EasyTcpServer_hpp_
 
 #ifdef _WIN32
+	#define FD_SETSIZE      1024
 	#define WIN32_LEAN_AND_MEAN
 	#define _WINSOCK_DEPRECATED_NO_WARNINGS
 	#include<windows.h>
@@ -20,6 +21,7 @@
 #include<stdio.h>
 #include<vector>
 #include"MessageHeader.hpp"
+#include"CELLTimestamp.hpp"
 
 /*select»áÑ­»·±éÀúËüËù¼à²âµÄfd_setÄÚµÄËùÓĞÎÄ¼şÃèÊö·û¶ÔÓ¦µÄÇı¶¯³ÌĞòµÄpollº¯Êı¡£
 Çı¶¯³ÌĞòÌá¹©µÄpollº¯ÊıÊ×ÏÈ»á½«µ÷ÓÃselectµÄÓÃ»§½ø³Ì²åÈëµ½¸ÃÉè±¸Çı¶¯¶ÔÓ¦×ÊÔ´µÄµÈ´ı¶ÓÁĞ(Èç¶Á/Ğ´µÈ´ı¶ÓÁĞ)£¬
@@ -37,7 +39,7 @@ FD_ISSET(fd, &set); /*ÔÚµ÷ÓÃselect()º¯Êıºó£¬ÓÃFD_ISSETÀ´¼ì²âfdÊÇ·ñÔÚset¼¯ºÏÖĞ£¬µ
 
 //»º³åÇø×îĞ¡µ¥Ôª´óĞ¡
 #ifndef RECV_BUFF_SZIE
-#define RECV_BUFF_SZIE 102400
+#define RECV_BUFF_SZIE 10240
 #endif // !RECV_BUFF_SZIE
 
 class ClientSocket 
@@ -82,10 +84,13 @@ class EasyTcpServer
 private:
 	SOCKET _sock;
 	std::vector<ClientSocket*> _clients;
+	CELLTimestamp _tTime;
+	int _recvCount;
 public:
 	EasyTcpServer()
 	{
 		_sock = INVALID_SOCKET;
+		_recvCount = 0;
 	}
 	virtual ~EasyTcpServer()
 	{
@@ -187,10 +192,10 @@ public:
 		}
 		else
 		{
-			NewUserJoin userJoin;
-			SendDataToAll(&userJoin);
+			//NewUserJoin userJoin;
+			//SendDataToAll(&userJoin);
 			_clients.push_back(new ClientSocket(cSock));
-			printf("socket=<%d>ĞÂ¿Í»§¶Ë¼ÓÈë£ºsocket = %d,IP = %s \n", (int)_sock, (int)cSock, inet_ntoa(clientAddr.sin_addr));
+			//printf("socket=<%d>ĞÂ¿Í»§¶Ë<%d>¼ÓÈë£ºsocket = %d,IP = %s \n", (int)_sock, _clients.size(),(int)cSock, inet_ntoa(clientAddr.sin_addr));
 		}
 		return cSock;
 	}
@@ -266,6 +271,7 @@ public:
 			{
 				FD_CLR(_sock, &fdRead);
 				Accept();
+				return true;
 			}
 			for (int n = (int)_clients.size() - 1; n >= 0; n--)
 			{
@@ -338,6 +344,14 @@ public:
 	//ÏìÓ¦ÍøÂçÏûÏ¢
 	virtual void OnNetMsg(SOCKET cSock, DataHeader* header)
 	{
+		_recvCount++;
+		auto t1 = _tTime.getElapsedSecond();
+		if (t1 >= 1.0)
+		{
+			printf("time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", t1, _sock,_clients.size(), _recvCount);
+			_recvCount = 0;
+			_tTime.update();
+		}
 		switch (header->cmd)
 		{
 		case CMD_LOGIN:
@@ -346,8 +360,8 @@ public:
 			Login* login = (Login*)header;
 			//printf("ÊÕµ½¿Í»§¶Ë<Socket=%d>ÇëÇó£ºCMD_LOGIN,Êı¾İ³¤¶È£º%d,userName=%s PassWord=%s\n", cSock, login->dataLength, login->userName, login->PassWord);
 			//ºöÂÔÅĞ¶ÏÓÃ»§ÃÜÂëÊÇ·ñÕıÈ·µÄ¹ı³Ì
-			LoginResult ret;
-			SendData(cSock, &ret);
+			//LoginResult ret;
+			//SendData(cSock, &ret);
 		}
 		break;
 		case CMD_LOGOUT:
@@ -355,8 +369,8 @@ public:
 			Logout* logout = (Logout*)header;
 			//printf("ÊÕµ½¿Í»§¶Ë<Socket=%d>ÇëÇó£ºCMD_LOGOUT,Êı¾İ³¤¶È£º%d,userName=%s \n", cSock, logout->dataLength, logout->userName);
 			//ºöÂÔÅĞ¶ÏÓÃ»§ÃÜÂëÊÇ·ñÕıÈ·µÄ¹ı³Ì
-			LogoutResult ret;
-			SendData(cSock, &ret);
+			//LogoutResult ret;
+			//SendData(cSock, &ret);
 		}
 		break;
 		default:
