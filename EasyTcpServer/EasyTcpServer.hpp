@@ -46,8 +46,7 @@ FD_ISSET(fd, &set); /*ÔÚµ÷ÓÃselect()º¯Êıºó£¬ÓÃFD_ISSETÀ´¼ì²âfdÊÇ·ñÔÚset¼¯ºÏÖĞ£¬µ
 #define RECV_BUFF_SZIE 10240
 #endif // !RECV_BUFF_SZIE
 
-#define _CellServer_THREAD_COUNT 4
-
+//¿Í»§¶ËÊı¾İÀàĞÍ
 class ClientSocket 
 {
 public:
@@ -76,22 +75,37 @@ public:
 	{
 		_lastPos = pos;
 	}
+
+	//·¢ËÍÊı¾İ
+	int SendData(DataHeader* header)
+	{
+		if (header)
+		{
+			return send(_sockfd, (const char*)header, header->dataLength, 0);
+		}
+		return SOCKET_ERROR;
+	}
+
 private:
 	// socket fd_set  file desc set
 	SOCKET _sockfd;
 	//µÚ¶ş»º³åÇø ÏûÏ¢»º³åÇø
-	char _szMsgBuf[RECV_BUFF_SZIE * 10];
+	char _szMsgBuf[RECV_BUFF_SZIE * 5];
 	//ÏûÏ¢»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃ
 	int _lastPos;
 };
 
+//ÍøÂçÊÂ¼ş½Ó¿Ú
 class INetEvent
 {
 public:
 	//´¿Ğéº¯Êı
+	//¿Í»§¶Ë¼ÓÈëÊÂ¼ş
+	virtual void OnNetJoin(ClientSocket* pClient) = 0;
 	//¿Í»§¶ËÀë¿ªÊÂ¼ş
-	virtual void OnLeave(ClientSocket* pClient) = 0;
-	virtual void OnNetMsg(SOCKET cSock, DataHeader* header) = 0;
+	virtual void OnNetLeave(ClientSocket* pClient) = 0;
+	//¿Í»§¶ËÏûÏ¢ÊÂ¼ş
+	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header) = 0;
 private:
 
 };
@@ -102,8 +116,6 @@ public:
 	CellServer(SOCKET sock = INVALID_SOCKET)
 	{
 		_sock = sock;
-		_pThread = nullptr;
-		_recvCount = 0;
 		_pNetEvent = nullptr;
 	}
 
@@ -129,18 +141,15 @@ public:
 				closesocket(_clients[n]->sockfd());
 				delete _clients[n];
 			}
-			// 8 ¹Ø±ÕÌ×½Ú×Öclosesocket
+			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			closesocket(_sock);
-			//------------
-			//Çå³ıWindows socket»·¾³
-			WSACleanup();
 #else
 			for (int n = (int)_clients.size() - 1; n >= 0; n--)
 			{
 				close(_clients[n]->sockfd());
 				delete _clients[n];
 			}
-			// 8 ¹Ø±ÕÌ×½Ú×Öclosesocket
+			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			close(_sock);
 #endif
 			_clients.clear();
@@ -154,7 +163,6 @@ public:
 	}
 
 	//´¦ÀíÍøÂçÏûÏ¢
-	//int _nCount = 0;
 	bool OnRun()
 	{
 		while (isRun())
@@ -211,7 +219,7 @@ public:
 						if (iter != _clients.end())
 						{
 							if(_pNetEvent)
-								_pNetEvent->OnLeave(_clients[n]);
+								_pNetEvent->OnNetLeave(_clients[n]);
 							delete _clients[n];
 							_clients.erase(iter);
 						}
@@ -219,6 +227,7 @@ public:
 				}
 			}
 		}
+		return false;
 	}
 	//»º³åÇø
 	char _szRecv[RECV_BUFF_SZIE] = {};
@@ -230,7 +239,7 @@ public:
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)
 		{
-			printf("¿Í»§¶Ë<Socket=%d>ÒÑÍË³ö£¬ÈÎÎñ½áÊø¡£\n", pClient->sockfd());
+			//printf("¿Í»§¶Ë<Socket=%d>ÒÑÍË³ö£¬ÈÎÎñ½áÊø¡£\n", pClient->sockfd());
 			return -1;
 		}
 		//½«ÊÕÈ¡µ½µÄÊı¾İ¿½±´µ½ÏûÏ¢»º³åÇø
@@ -249,7 +258,7 @@ public:
 				//ÏûÏ¢»º³åÇøÊ£ÓàÎ´´¦ÀíÊı¾İµÄ³¤¶È
 				int nSize = pClient->getLastPos() - header->dataLength;
 				//´¦ÀíÍøÂçÏûÏ¢
-				OnNetMsg(pClient->sockfd(), header);
+				OnNetMsg(pClient, header);
 				//½«ÏûÏ¢»º³åÇøÊ£ÓàÎ´´¦ÀíÊı¾İÇ°ÒÆ
 				memcpy(pClient->msgBuf(), pClient->msgBuf() + header->dataLength, nSize);
 				//ÏûÏ¢»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃÇ°ÒÆ
@@ -264,39 +273,9 @@ public:
 	}
 
 	//ÏìÓ¦ÍøÂçÏûÏ¢
-	virtual void OnNetMsg(SOCKET cSock, DataHeader* header)
+	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
 	{
-		_recvCount++;
-		_pNetEvent->OnNetMsg(cSock, header);
-		switch (header->cmd)
-		{
-		case CMD_LOGIN:
-		{
-
-			Login* login = (Login*)header;
-			//printf("ÊÕµ½¿Í»§¶Ë<Socket=%d>ÇëÇó£ºCMD_LOGIN,Êı¾İ³¤¶È£º%d,userName=%s PassWord=%s\n", cSock, login->dataLength, login->userName, login->PassWord);
-			//ºöÂÔÅĞ¶ÏÓÃ»§ÃÜÂëÊÇ·ñÕıÈ·µÄ¹ı³Ì
-			//LoginResult ret;
-			//SendData(cSock, &ret);
-		}
-		break;
-		case CMD_LOGOUT:
-		{
-			Logout* logout = (Logout*)header;
-			//printf("ÊÕµ½¿Í»§¶Ë<Socket=%d>ÇëÇó£ºCMD_LOGOUT,Êı¾İ³¤¶È£º%d,userName=%s \n", cSock, logout->dataLength, logout->userName);
-			//ºöÂÔÅĞ¶ÏÓÃ»§ÃÜÂëÊÇ·ñÕıÈ·µÄ¹ı³Ì
-			//LogoutResult ret;
-			//SendData(cSock, &ret);
-		}
-		break;
-		default:
-		{
-			printf("<socket=%d>ÊÕµ½Î´¶¨ÒåÏûÏ¢,Êı¾İ³¤¶È£º%d\n", cSock, header->dataLength);
-			//DataHeader ret;
-			//SendData(cSock, &ret);
-		}
-		break;
-		}
+		_pNetEvent->OnNetMsg(pClient, header);
 	}
 
 	void addClient(ClientSocket* pClient)
@@ -309,7 +288,7 @@ public:
 
 	void Start()
 	{
-		_pThread = new std::thread(std::mem_fun(&CellServer::OnRun), this);
+		_thread = std::thread(std::mem_fn(&CellServer::OnRun), this);
 	}
 
 	size_t getClientCount()
@@ -322,29 +301,28 @@ private:
 	std::vector<ClientSocket*> _clients;
 	//»º³å¿Í»§¶ÓÁĞ
 	std::vector<ClientSocket*> _clientsBuff;
+	//»º³å¶ÓÁĞµÄËø
 	std::mutex _mutex;
-	std::thread* _pThread;
+	std::thread _thread;
+	//ÍøÂçÊÂ¼ş¶ÔÏó
 	INetEvent* _pNetEvent;
-public:
-	std::atomic_int _recvCount;
 };
 
 class EasyTcpServer : public INetEvent
 {
-private:
-	SOCKET _sock;
-	std::vector<ClientSocket*> _clients;
-	std::vector<CellServer*> _cellServers;
-	CELLTimestamp _tTime;
 public:
 	EasyTcpServer()
 	{
 		_sock = INVALID_SOCKET;
+		_recvCount = 0;
+		_clientCount = 0;
 	}
 	virtual ~EasyTcpServer()
 	{
 		Close();
 	}
+
+public:
 	//³õÊ¼»¯Socket
 	SOCKET InitSocket()
 	{
@@ -441,17 +419,15 @@ public:
 		}
 		else
 		{
-			//NewUserJoin userJoin;
-			//SendDataToAll(&userJoin);
+			//½«ĞÂ¿Í»§¶Ë·ÖÅä¸ø¿Í»§ÊıÁ¿×îÉÙµÄcellServer
 			addClientToCellServer(new ClientSocket(cSock));
-			//printf("socket=<%d>ĞÂ¿Í»§¶Ë<%d>¼ÓÈë£ºsocket = %d,IP = %s \n", (int)_sock, _clients.size(),(int)cSock, inet_ntoa(clientAddr.sin_addr));
+			//»ñÈ¡IPµØÖ· inet_ntoa(clientAddr.sin_addr)
 		}
 		return cSock;
 	}
-
+	
 	void addClientToCellServer(ClientSocket* pClient)
 	{
-		_clients.push_back(pClient);
 		//²éÕÒ¿Í»§ÊıÁ¿×îÉÙµÄCellServerÏûÏ¢´¦Àí¶ÔÏó
 		auto pMinServer = _cellServers[0];
 		for(auto pCellServer : _cellServers)
@@ -462,15 +438,18 @@ public:
 			}
 		}
 		pMinServer->addClient(pClient);
+		OnNetJoin(pClient);
 	}
 
-	void Start()
+	void Start(int nCellServer)
 	{
-		for (int n = 0; n < _CellServer_THREAD_COUNT; n++)
+		for (int n = 0; n < nCellServer; n++)
 		{
 			auto ser = new CellServer(_sock);
 			_cellServers.push_back(ser);
+			//×¢²áÍøÂçÊÂ¼ş½ÓÊÜ¶ÔÏó
 			ser->setEventObj(this);
+			//Æô¶¯ÏûÏ¢´¦ÀíÏß³Ì
 			ser->Start();
 		}
 	}
@@ -480,30 +459,18 @@ public:
 		if (_sock != INVALID_SOCKET)
 		{
 #ifdef _WIN32
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
-			{
-				closesocket(_clients[n]->sockfd());
-				delete _clients[n];
-			}
-			// 8 ¹Ø±ÕÌ×½Ú×Öclosesocket
+			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			closesocket(_sock);
 			//------------
 			//Çå³ıWindows socket»·¾³
 			WSACleanup();
 #else
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
-			{
-				close(_clients[n]->sockfd());
-				delete _clients[n];
-			}
-			// 8 ¹Ø±ÕÌ×½Ú×Öclosesocket
+			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			close(_sock);
 #endif
-			_clients.clear();
 		}
 	}
 	//´¦ÀíÍøÂçÏûÏ¢
-	//int _nCount = 0;
 	bool OnRun()
 	{
 		if (isRun())
@@ -511,24 +478,17 @@ public:
 			time4msg();
 			//²®¿ËÀûÌ×½Ó×Ö BSD socket
 			fd_set fdRead;//ÃèÊö·û£¨socket£© ¼¯ºÏ
-			//fd_set fdWrite;
-			//fd_set fdExp;
 			//ÇåÀí¼¯ºÏ
 			FD_ZERO(&fdRead);
-			//FD_ZERO(&fdWrite);
-			//FD_ZERO(&fdExp);
 			//½«ÃèÊö·û£¨socket£©¼ÓÈë¼¯ºÏ
 			FD_SET(_sock, &fdRead);
-			//FD_SET(_sock, &fdWrite);
-			//FD_SET(_sock, &fdExp);
 			///nfds ÊÇÒ»¸öÕûÊıÖµ ÊÇÖ¸fd_set¼¯ºÏÖĞËùÓĞÃèÊö·û(socket)µÄ·¶Î§£¬¶ø²»ÊÇÊıÁ¿
 			///¼ÈÊÇËùÓĞÎÄ¼şÃèÊö·û×î´óÖµ+1 ÔÚWindowsÖĞÕâ¸ö²ÎÊı¿ÉÒÔĞ´0
 			timeval t = { 0,10};
 			int ret = select(_sock + 1, &fdRead, 0, 0, &t); //
-			//printf("select ret=%d count=%d\n", ret, _nCount++);
 			if (ret < 0)
 			{
-				printf("selectÈÎÎñ½áÊø¡£\n");
+				printf("Accept SelectÈÎÎñ½áÊø¡£\n");
 				Close();
 				return false;
 			}
@@ -549,57 +509,46 @@ public:
 		return _sock != INVALID_SOCKET;
 	}
 
-	//ÏìÓ¦ÍøÂçÏûÏ¢
+	//¼ÆËã²¢Êä³öÃ¿ÃëÊÕµ½µÄÍøÂçÏûÏ¢
 	void time4msg()
 	{
 		auto t1 = _tTime.getElapsedSecond();
 		if (t1 >= 1.0)
 		{
-			int recvCount = 0;
-			for (auto ser : _cellServers)
-			{
-				recvCount += ser->_recvCount;
-				ser->_recvCount = 0;
-			}
-			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", _cellServers.size(), t1, _sock,(int)_clients.size(), (int)(recvCount/ t1));
+			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", _cellServers.size(), t1, _sock,(int)_clientCount, (int)(_recvCount/ t1));
+			_recvCount = 0;
 			_tTime.update();
 		}
 	}
-
-	//·¢ËÍÖ¸¶¨SocketÊı¾İ
-	int SendData(SOCKET cSock, DataHeader* header)
+	//Ö»»á±»Ò»¸öÏß³Ì´¥·¢ °²È«
+	virtual void OnNetJoin(ClientSocket* pClient)
 	{
-		if (isRun() && header)
-		{
-			return send(cSock, (const char*)header, header->dataLength, 0);
-		}
-		return SOCKET_ERROR;
+		_clientCount++;
+	}
+	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
+	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
+	virtual void OnNetLeave(ClientSocket* pClient)
+	{
+		_clientCount--;
+	}
+	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
+	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
+	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
+	{
+		_recvCount++;
 	}
 
-	void SendDataToAll(DataHeader* header)
-	{
-		for (int n = (int)_clients.size() - 1; n >= 0; n--)
-		{
-			SendData(_clients[n]->sockfd(), header);
-		}
-	}
-
-	virtual void OnLeave(ClientSocket* pClient)
-	{
-		for (int n = (int)_clients.size() - 1; n >= 0; n--)
-		{
-			if (_clients[n] == pClient)
-			{
-				auto iter = _clients.begin() + n;
-				if(iter != _clients.end())
-					_clients.erase(iter);
-			}
-		}
-	}
-	virtual void OnNetMsg(SOCKET cSock, DataHeader* header)
-	{
-
-	}
+private:
+	SOCKET _sock;
+	//ÏûÏ¢´¦Àí¶ÔÏó£¬ÄÚ²¿»á´´½¨Ïß³Ì
+	std::vector<CellServer*> _cellServers;
+	//Ã¿ÃëÏûÏ¢¼ÆÊ±
+	CELLTimestamp _tTime;
+protected:
+	//ÊÕµ½ÏûÏ¢¼ÆÊı
+	std::atomic_int _recvCount;
+	//¿Í»§¶Ë¼ÆÊı
+	std::atomic_int _clientCount;
 };
 
 #endif // !_EasyTcpServer_hpp_
