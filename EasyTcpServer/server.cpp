@@ -26,7 +26,8 @@ int main()
 	EasyTcpServer server;
 	server.InitSocket();
 	server.Bind(nullptr, 4567);
-	server.Listen(10);
+	server.Listen(5);
+	server.Start();
 
 	//Æô¶¯UIÏß³Ì
 	std::thread t1(cmdThread);
