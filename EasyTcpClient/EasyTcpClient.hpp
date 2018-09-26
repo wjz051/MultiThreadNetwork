@@ -149,13 +149,14 @@ public:
 	//消息缓冲区的数据尾部位置
 	int _lastPos = 0;
 	//接收缓冲区
-	char _szRecv[RECV_BUFF_SZIE] = {};
+	//char _szRecv[RECV_BUFF_SZIE] = {};
 
 	//接收数据 处理粘包 拆分包
 	int RecvData(SOCKET cSock)
 	{
 		// 5 接收数据
-		int nLen = (int)recv(cSock, _szRecv, RECV_BUFF_SZIE, 0);
+		char* szRecv = _szMsgBuf + _lastPos;
+		int nLen = (int)recv(cSock, szRecv, (RECV_BUFF_SZIE * 5) - _lastPos, 0);
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)
 		{
@@ -163,7 +164,7 @@ public:
 			return -1;
 		}
 		//将收取到的数据拷贝到消息缓冲区
-		memcpy(_szMsgBuf+_lastPos, _szRecv, nLen);
+		//memcpy(_szMsgBuf+_lastPos, _szRecv, nLen);
 		//消息缓冲区的数据尾部位置后移
 		_lastPos += nLen;
 		//判断消息缓冲区的数据长度大于消息头DataHeader长度
@@ -233,9 +234,7 @@ public:
 		int ret = SOCKET_ERROR;
 		if (isRun() && header)
 		{
-			for(int n = 0; n < nLen; n++)
-				//测试send函数发送极限
-				ret = send(_sock, ((const char*)header)+n, 1, 0);
+			ret = send(_sock, (const char*)header, nLen, 0);
 			if (SOCKET_ERROR == ret)
 			{
 				Close();

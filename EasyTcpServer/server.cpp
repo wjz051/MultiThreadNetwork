@@ -50,9 +50,9 @@ public:
 			Login* login = (Login*)header;
 			//printf("收到客户端<Socket=%d>请求：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", cSock, login->dataLength, login->userName, login->PassWord);
 			//忽略判断用户密码是否正确的过程
-			//LoginResult ret;
-			//pClient->SendData(&ret);
-		}
+			LoginResult ret;
+			pClient->SendData(&ret);
+		}//接收 消息---处理 发送   生产者 数据缓冲区  消费者 
 		break;
 		case CMD_LOGOUT:
 		{

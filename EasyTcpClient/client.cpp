@@ -61,7 +61,7 @@ void sendThread(int id)
 		std::this_thread::sleep_for(t);
 	}
 
-	Login login[1];
+	Login login[10];
 	for (int n = 0; n < 10; n++)
 	{
 		strcpy(login[n].userName, "lyd");
@@ -74,9 +74,9 @@ void sendThread(int id)
 		{
 			if (SOCKET_ERROR != client[n]->SendData(login, nLen))
 			{
-				sendCount+=100;
+				sendCount++;
 			}
-			//client[n]->OnRun();
+			client[n]->OnRun();
 		}
 	}
 

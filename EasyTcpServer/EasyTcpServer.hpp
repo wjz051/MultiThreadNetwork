@@ -275,12 +275,14 @@ public:
 		}
 	}
 	//缓冲区
-	char _szRecv[RECV_BUFF_SZIE] = {};
+	//char _szRecv[RECV_BUFF_SZIE] = {};
 	//接收数据 处理粘包 拆分包
 	int RecvData(ClientSocket* pClient)
 	{
-		// 5 接收客户端数据----测试recv函数接收极限
-		int nLen = (int)recv(pClient->sockfd(), _szRecv, RECV_BUFF_SZIE, 0);
+
+		//接收客户端数据
+		char* szRecv = pClient->msgBuf() + pClient->getLastPos();
+		int nLen = (int)recv(pClient->sockfd(), szRecv, (RECV_BUFF_SZIE*5)- pClient->getLastPos(), 0);
 		_pNetEvent->OnNetRecv(pClient);
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)
@@ -289,7 +291,7 @@ public:
 			return -1;
 		}
 		//将收取到的数据拷贝到消息缓冲区
-		memcpy(pClient->msgBuf() + pClient->getLastPos(), _szRecv, nLen);
+		//memcpy(pClient->msgBuf() + pClient->getLastPos(), _szRecv, nLen);
 		//消息缓冲区的数据尾部位置后移
 		pClient->setLastPos(pClient->getLastPos() + nLen);
 
@@ -594,7 +596,7 @@ public:
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
 	{
-		_msgCount++;
+		_recvCount++;
 	}
 };
 
