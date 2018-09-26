@@ -1,6 +1,7 @@
 #ifndef _EasyTcpServer_hpp_
 #define _EasyTcpServer_hpp_
 
+//4个线程10000连接，每个线程连接2500。
 #ifdef _WIN32
 	#define FD_SETSIZE      2506
 	#define WIN32_LEAN_AND_MEAN
@@ -20,6 +21,7 @@
 
 #include<stdio.h>
 #include<vector>
+#include<map>
 #include<thread>
 #include<mutex>
 #include<atomic>
@@ -136,18 +138,18 @@ public:
 		if (_sock != INVALID_SOCKET)
 		{
 #ifdef _WIN32
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
+			for (auto iter : _clients)
 			{
-				closesocket(_clients[n]->sockfd());
-				delete _clients[n];
+				closesocket(iter.second->sockfd());
+				delete iter.second;
 			}
 			//关闭套节字closesocket
 			closesocket(_sock);
 #else
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
+			for (auto iter : _clients)
 			{
-				close(_clients[n]->sockfd());
-				delete _clients[n];
+				close(iter.second->sockfd());
+				delete iter.second;
 			}
 			//关闭套节字closesocket
 			close(_sock);
@@ -163,8 +165,14 @@ public:
 	}
 
 	//处理网络消息
+	//备份客户socket fd_set
+	fd_set _fdRead_bak;
+	//客户列表是否有变化
+	bool _clients_change;
+	SOCKET _maxSock;
 	bool OnRun()
 	{
+		_clients_change = false;
 		while (isRun())
 		{
 			if (_clientsBuff.size() > 0)
@@ -172,9 +180,10 @@ public:
 				std::lock_guard<std::mutex> lock(_mutex);
 				for (auto pClient : _clientsBuff)
 				{
-					_clients.push_back(pClient);
+					_clients[pClient->sockfd()] = pClient;
 				}
 				_clientsBuff.clear();
+				_clients_change = true;
 			}
 
 			//如果没有需要处理的客户端，就跳过
@@ -189,45 +198,79 @@ public:
 			fd_set fdRead;//描述符（socket） 集合
 			//清理集合
 			FD_ZERO(&fdRead);
-			//将描述符（socket）加入集合
-			SOCKET maxSock = _clients[0]->sockfd();
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
+			if (_clients_change)
 			{
-				FD_SET(_clients[n]->sockfd(), &fdRead);
-				if (maxSock < _clients[n]->sockfd())
+				_clients_change = false;
+				//将描述符（socket）加入集合
+				_maxSock = _clients.begin()->second->sockfd();
+				for (auto iter : _clients)
 				{
-					maxSock = _clients[n]->sockfd();
+					FD_SET(iter.second->sockfd(), &fdRead);
+					if (_maxSock < iter.second->sockfd())
+					{
+						_maxSock = iter.second->sockfd();
+					}
 				}
+				memcpy(&_fdRead_bak, &fdRead, sizeof(fd_set));
 			}
+			else {
+				memcpy(&fdRead, &_fdRead_bak, sizeof(fd_set));
+			}
+
 			///nfds 是一个整数值 是指fd_set集合中所有描述符(socket)的范围，而不是数量
 			///既是所有文件描述符最大值+1 在Windows中这个参数可以写0
-			int ret = select(maxSock + 1, &fdRead, nullptr, nullptr, nullptr);
+			int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, nullptr);
 			if (ret < 0)
 			{
 				printf("select任务结束。\n");
 				Close();
 				return false;
 			}
-
-			for (int n = (int)_clients.size() - 1; n >= 0; n--)
+			else if (ret == 0)
 			{
-				if (FD_ISSET(_clients[n]->sockfd(), &fdRead))
+				continue;
+			}
+			
+#ifdef _WIN32
+			for (int n = 0; n < fdRead.fd_count; n++)
+			{
+				auto iter  = _clients.find(fdRead.fd_array[n]);
+				if (iter != _clients.end())
 				{
-					if (-1 == RecvData(_clients[n]))
+					if (-1 == RecvData(iter->second))
 					{
-						auto iter = _clients.begin() + n;//std::vector<SOCKET>::iterator
-						if (iter != _clients.end())
-						{
-							if(_pNetEvent)
-								_pNetEvent->OnNetLeave(_clients[n]);
-							delete _clients[n];
-							_clients.erase(iter);
-						}
+						if (_pNetEvent)
+							_pNetEvent->OnNetLeave(iter->second);
+						_clients_change = true;
+						_clients.erase(iter->first);
+					}
+				}else {
+					printf("error. if (iter != _clients.end())\n");
+				}
+
+			}
+#else
+			std::vector<ClientSocket*> temp;
+			for (auto iter : _clients)
+			{
+				if (FD_ISSET(iter.second->sockfd(), &fdRead))
+				{
+					if (-1 == RecvData(iter.second))
+					{
+						if (_pNetEvent)
+							_pNetEvent->OnNetLeave(iter.second);
+						_clients_change = false;
+						temp.push_back(iter.second);
 					}
 				}
 			}
+			for (auto pClient : temp)
+			{
+				_clients.erase(pClient->sockfd());
+				delete pClient;
+			}
+#endif
 		}
-		return false;
 	}
 	//缓冲区
 	char _szRecv[RECV_BUFF_SZIE] = {};
@@ -298,7 +341,7 @@ public:
 private:
 	SOCKET _sock;
 	//正式客户队列
-	std::vector<ClientSocket*> _clients;
+	std::map<SOCKET,ClientSocket*> _clients;
 	//缓冲客户队列
 	std::vector<ClientSocket*> _clientsBuff;
 	//缓冲队列的锁
@@ -310,6 +353,17 @@ private:
 
 class EasyTcpServer : public INetEvent
 {
+private:
+	SOCKET _sock;
+	//消息处理对象，内部会创建线程
+	std::vector<CellServer*> _cellServers;
+	//每秒消息计时
+	CELLTimestamp _tTime;
+protected:
+	//收到消息计数
+	std::atomic_int _recvCount;
+	//客户端计数
+	std::atomic_int _clientCount;
 public:
 	EasyTcpServer()
 	{
@@ -321,8 +375,6 @@ public:
 	{
 		Close();
 	}
-
-public:
 	//初始化Socket
 	SOCKET InitSocket()
 	{
@@ -537,18 +589,6 @@ public:
 	{
 		_recvCount++;
 	}
-
-private:
-	SOCKET _sock;
-	//消息处理对象，内部会创建线程
-	std::vector<CellServer*> _cellServers;
-	//每秒消息计时
-	CELLTimestamp _tTime;
-protected:
-	//收到消息计数
-	std::atomic_int _recvCount;
-	//客户端计数
-	std::atomic_int _clientCount;
 };
 
 #endif // !_EasyTcpServer_hpp_

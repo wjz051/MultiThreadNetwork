@@ -28,14 +28,14 @@ public:
 	virtual void OnNetJoin(ClientSocket* pClient)
 	{
 		_clientCount++;
-		printf("client<%d> join\n", pClient->sockfd());
+		//printf("client<%d> join\n", pClient->sockfd());
 	}
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetLeave(ClientSocket* pClient)
 	{
 		_clientCount--;
-		printf("client<%d> leave\n", pClient->sockfd());
+		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
@@ -50,8 +50,8 @@ public:
 			Login* login = (Login*)header;
 			//printf("收到客户端<Socket=%d>请求：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", cSock, login->dataLength, login->userName, login->PassWord);
 			//忽略判断用户密码是否正确的过程
-			LoginResult ret;
-			pClient->SendData(&ret);
+			//LoginResult ret;
+			//pClient->SendData(&ret);
 		}
 		break;
 		case CMD_LOGOUT:
