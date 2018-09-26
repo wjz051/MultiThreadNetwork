@@ -74,7 +74,7 @@ void sendThread(int id)
 		{
 			if (SOCKET_ERROR != client[n]->SendData(login, nLen))
 			{
-				sendCount++;
+				sendCount+=100;
 			}
 			//client[n]->OnRun();
 		}
@@ -109,7 +109,7 @@ int main()
 		auto t = tTime.getElapsedSecond();
 		if (t >= 1.0)
 		{
-			printf("thread<%d>,clients<%d>,time<%lf>,send<%d>\n",tCount, cCount,t,sendCount);
+			printf("thread<%d>,clients<%d>,time<%lf>,send<%d>\n",tCount, cCount,t,(int)(sendCount/ t));
 			sendCount = 0;
 			tTime.update();
 		}

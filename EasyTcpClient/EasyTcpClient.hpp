@@ -233,7 +233,9 @@ public:
 		int ret = SOCKET_ERROR;
 		if (isRun() && header)
 		{
-			ret = send(_sock, (const char*)header, nLen, 0);
+			for(int n = 0; n < nLen; n++)
+				//测试send函数发送极限
+				ret = send(_sock, ((const char*)header)+n, 1, 0);
 			if (SOCKET_ERROR == ret)
 			{
 				Close();

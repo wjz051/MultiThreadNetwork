@@ -280,7 +280,7 @@ public:
 	int RecvData(ClientSocket* pClient)
 	{
 		// 5 接收客户端数据----测试recv函数接收极限
-		int nLen = (int)recv(pClient->sockfd(), _szRecv, 1, 0);
+		int nLen = (int)recv(pClient->sockfd(), _szRecv, RECV_BUFF_SZIE, 0);
 		_pNetEvent->OnNetRecv(pClient);
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)

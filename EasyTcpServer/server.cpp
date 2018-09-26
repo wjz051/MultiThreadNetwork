@@ -46,7 +46,7 @@ public:
 		{
 		case CMD_LOGIN:
 		{
-
+			//send recv 
 			Login* login = (Login*)header;
 			//printf("收到客户端<Socket=%d>请求：CMD_LOGIN,数据长度：%d,userName=%s PassWord=%s\n", cSock, login->dataLength, login->userName, login->PassWord);
 			//忽略判断用户密码是否正确的过程
