@@ -41,7 +41,7 @@ public:
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
 	{
-		_recvCount++;
+		_msgCount++;
 		switch (header->cmd)
 		{
 		case CMD_LOGIN:
@@ -71,6 +71,12 @@ public:
 		}
 		break;
 		}
+	}
+
+	virtual void OnNetRecv(ClientSocket* pClient)
+	{
+		_recvCount++;
+		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 private:
 

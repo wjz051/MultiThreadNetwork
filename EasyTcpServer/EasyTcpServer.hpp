@@ -108,6 +108,8 @@ public:
 	virtual void OnNetLeave(ClientSocket* pClient) = 0;
 	//客户端消息事件
 	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header) = 0;
+	//recv事件
+	virtual void OnNetRecv(ClientSocket* pClient) = 0;
 private:
 
 };
@@ -172,7 +174,7 @@ public:
 	SOCKET _maxSock;
 	bool OnRun()
 	{
-		_clients_change = false;
+		_clients_change = true;
 		while (isRun())
 		{
 			if (_clientsBuff.size() > 0)
@@ -277,8 +279,9 @@ public:
 	//接收数据 处理粘包 拆分包
 	int RecvData(ClientSocket* pClient)
 	{
-		// 5 接收客户端数据
-		int nLen = (int)recv(pClient->sockfd(), _szRecv, RECV_BUFF_SZIE, 0);
+		// 5 接收客户端数据----测试recv函数接收极限
+		int nLen = (int)recv(pClient->sockfd(), _szRecv, 1, 0);
+		_pNetEvent->OnNetRecv(pClient);
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)
 		{
@@ -360,8 +363,10 @@ private:
 	//每秒消息计时
 	CELLTimestamp _tTime;
 protected:
-	//收到消息计数
+	//SOCKET recv计数
 	std::atomic_int _recvCount;
+	//收到消息计数
+	std::atomic_int _msgCount;
 	//客户端计数
 	std::atomic_int _clientCount;
 public:
@@ -369,6 +374,7 @@ public:
 	{
 		_sock = INVALID_SOCKET;
 		_recvCount = 0;
+		_msgCount = 0;
 		_clientCount = 0;
 	}
 	virtual ~EasyTcpServer()
@@ -567,8 +573,9 @@ public:
 		auto t1 = _tTime.getElapsedSecond();
 		if (t1 >= 1.0)
 		{
-			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recvCount<%d>\n", _cellServers.size(), t1, _sock,(int)_clientCount, (int)(_recvCount/ t1));
+			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recv<%d>,msg<%d>\n", _cellServers.size(), t1, _sock,(int)_clientCount, (int)(_recvCount/ t1), (int)(_msgCount / t1));
 			_recvCount = 0;
+			_msgCount = 0;
 			_tTime.update();
 		}
 	}
@@ -587,7 +594,7 @@ public:
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
 	{
-		_recvCount++;
+		_msgCount++;
 	}
 };
 
