@@ -28,6 +28,7 @@
 
 #include"MessageHeader.hpp"
 #include"CELLTimestamp.hpp"
+#include"CELLTask.hpp"
 
 /*select会循环遍历它所监测的fd_set内的所有文件描述符对应的驱动程序的poll函数。
 驱动程序提供的poll函数首先会将调用select的用户进程插入到该设备驱动对应资源的等待队列(如读/写等待队列)，
@@ -137,6 +138,7 @@ private:
 	int _lastSendPos;
 };
 
+class CellServer;
 //网络事件接口
 class INetEvent
 {
@@ -147,13 +149,34 @@ public:
 	//客户端离开事件
 	virtual void OnNetLeave(ClientSocket* pClient) = 0;
 	//客户端消息事件
-	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header) = 0;
+	virtual void OnNetMsg(CellServer* pCellServer, ClientSocket* pClient, DataHeader* header) = 0;
 	//recv事件
 	virtual void OnNetRecv(ClientSocket* pClient) = 0;
 private:
 
 };
 
+//网络消息发送任务
+class CellSendMsg2ClientTask:public CellTask
+{
+	ClientSocket* _pClient;
+	DataHeader* _pHeader;
+public:
+	CellSendMsg2ClientTask(ClientSocket* pClient, DataHeader* header)
+	{
+		_pClient = pClient;
+		_pHeader = header;
+	}
+
+	//执行任务
+	void doTask()
+	{
+		_pClient->SendData(_pHeader);
+		delete _pHeader;
+	}
+};
+
+//网络消息接收处理服务类
 class CellServer
 {
 public:
@@ -212,12 +235,12 @@ public:
 	//客户列表是否有变化
 	bool _clients_change;
 	SOCKET _maxSock;
-	bool OnRun()
+	void OnRun()
 	{
 		_clients_change = true;
 		while (isRun())
 		{
-			if (_clientsBuff.size() > 0)
+			if (!_clientsBuff.empty())
 			{//从缓冲队列里取出客户数据
 				std::lock_guard<std::mutex> lock(_mutex);
 				for (auto pClient : _clientsBuff)
@@ -266,7 +289,7 @@ public:
 			{
 				printf("select任务结束。\n");
 				Close();
-				return false;
+				return;
 			}
 			else if (ret == 0)
 			{
@@ -361,7 +384,7 @@ public:
 	//响应网络消息
 	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
 	{
-		_pNetEvent->OnNetMsg(pClient, header);
+		_pNetEvent->OnNetMsg(this, pClient, header);
 	}
 
 	void addClient(ClientSocket* pClient)
@@ -375,11 +398,18 @@ public:
 	void Start()
 	{
 		_thread = std::thread(std::mem_fn(&CellServer::OnRun), this);
+		_taskServer.Start();
 	}
 
 	size_t getClientCount()
 	{
 		return _clients.size() + _clientsBuff.size();
+	}
+
+	void addSendTask(ClientSocket* pClient, DataHeader* header)
+	{
+		CellSendMsg2ClientTask* task = new CellSendMsg2ClientTask(pClient, header);
+		_taskServer.addTask(task);
 	}
 private:
 	SOCKET _sock;
@@ -392,6 +422,8 @@ private:
 	std::thread _thread;
 	//网络事件对象
 	INetEvent* _pNetEvent;
+	//
+	CellTaskServer _taskServer;
 };
 
 class EasyTcpServer : public INetEvent
@@ -623,18 +655,26 @@ public:
 	virtual void OnNetJoin(ClientSocket* pClient)
 	{
 		_clientCount++;
+		//printf("client<%d> join\n", pClient->sockfd());
 	}
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetLeave(ClientSocket* pClient)
 	{
 		_clientCount--;
+		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
-	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
+	virtual void OnNetMsg(CellServer* pCellServer, ClientSocket* pClient, DataHeader* header)
+	{
+		_msgCount++;
+	}
+
+	virtual void OnNetRecv(ClientSocket* pClient)
 	{
 		_recvCount++;
+		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 };
 
