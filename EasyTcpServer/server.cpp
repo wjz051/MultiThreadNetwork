@@ -3,7 +3,7 @@
 
 bool g_bRun = true;
 void cmdThread()
-{
+{//
 	while (true)
 	{
 		char cmdBuf[256] = {};

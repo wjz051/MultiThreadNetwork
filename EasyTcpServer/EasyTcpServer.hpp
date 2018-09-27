@@ -45,7 +45,8 @@ FD_ISSET(fd, &set); /*ÔÚµ÷ÓÃselect()º¯Êýºó£¬ÓÃFD_ISSETÀ´¼ì²âfdÊÇ·ñÔÚset¼¯ºÏÖÐ£¬µ
 
 //»º³åÇø×îÐ¡µ¥Ôª´óÐ¡
 #ifndef RECV_BUFF_SZIE
-#define RECV_BUFF_SZIE 10240
+#define RECV_BUFF_SZIE 10240*5
+#define SEND_BUFF_SZIE RECV_BUFF_SZIE
 #endif // !RECV_BUFF_SZIE
 
 //¿Í»§¶ËÊý¾ÝÀàÐÍ
@@ -55,8 +56,11 @@ public:
 	ClientSocket(SOCKET sockfd = INVALID_SOCKET)
 	{
 		_sockfd = sockfd;
-		memset(_szMsgBuf, 0, sizeof(_szMsgBuf));
+		memset(_szMsgBuf, 0, RECV_BUFF_SZIE);
 		_lastPos = 0;
+
+		memset(_szSendBuf, 0, SEND_BUFF_SZIE);
+		_lastSendPos = 0;
 	}
 
 	SOCKET sockfd()
@@ -81,20 +85,56 @@ public:
 	//·¢ËÍÊý¾Ý
 	int SendData(DataHeader* header)
 	{
-		if (header)
+		int ret = SOCKET_ERROR;
+		//Òª·¢ËÍµÄÊý¾Ý³¤¶È
+		int nSendLen = header->dataLength;
+		//Òª·¢ËÍµÄÊý¾Ý
+		const char* pSendData = (const char*)header;
+
+		while (true)
 		{
-			return send(_sockfd, (const char*)header, header->dataLength, 0);
+			if (_lastSendPos + nSendLen >= SEND_BUFF_SZIE)
+			{
+				//¼ÆËã¿É¿½±´µÄÊý¾Ý³¤¶È
+				int nCopyLen = SEND_BUFF_SZIE - _lastSendPos;
+				//¿½±´Êý¾Ý
+				memcpy(_szSendBuf + _lastSendPos, pSendData, nCopyLen);
+				//¼ÆËãÊ£ÓàÊý¾ÝÎ»ÖÃ
+				pSendData += nCopyLen;
+				//¼ÆËãÊ£ÓàÊý¾Ý³¤¶È
+				nSendLen -= nSendLen;
+				//·¢ËÍÊý¾Ý
+				ret = send(_sockfd, _szSendBuf, SEND_BUFF_SZIE, 0);
+				//Êý¾ÝÎ²²¿Î»ÖÃÇåÁã
+				_lastSendPos = 0;
+				//·¢ËÍ´íÎó
+				if (SOCKET_ERROR == ret)
+				{
+					return ret;
+				}
+			}else {
+				//½«Òª·¢ËÍµÄÊý¾Ý ¿½±´µ½·¢ËÍ»º³åÇøÎ²²¿
+				memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
+				//¼ÆËãÊý¾ÝÎ²²¿Î»ÖÃ
+				_lastSendPos += nSendLen;
+				break;
+			}
 		}
-		return SOCKET_ERROR;
+		return ret;
 	}
 
 private:
 	// socket fd_set  file desc set
 	SOCKET _sockfd;
 	//µÚ¶þ»º³åÇø ÏûÏ¢»º³åÇø
-	char _szMsgBuf[RECV_BUFF_SZIE * 5];
+	char _szMsgBuf[RECV_BUFF_SZIE];
 	//ÏûÏ¢»º³åÇøµÄÊý¾ÝÎ²²¿Î»ÖÃ
 	int _lastPos;
+
+	//µÚ¶þ»º³åÇø ·¢ËÍ»º³åÇø
+	char _szSendBuf[SEND_BUFF_SZIE];
+	//·¢ËÍ»º³åÇøµÄÊý¾ÝÎ²²¿Î»ÖÃ
+	int _lastSendPos;
 };
 
 //ÍøÂçÊÂ¼þ½Ó¿Ú
@@ -274,15 +314,13 @@ public:
 #endif
 		}
 	}
-	//»º³åÇø
-	//char _szRecv[RECV_BUFF_SZIE] = {};
 	//½ÓÊÕÊý¾Ý ´¦ÀíÕ³°ü ²ð·Ö°ü
 	int RecvData(ClientSocket* pClient)
 	{
 
 		//½ÓÊÕ¿Í»§¶ËÊý¾Ý
 		char* szRecv = pClient->msgBuf() + pClient->getLastPos();
-		int nLen = (int)recv(pClient->sockfd(), szRecv, (RECV_BUFF_SZIE*5)- pClient->getLastPos(), 0);
+		int nLen = (int)recv(pClient->sockfd(), szRecv, (RECV_BUFF_SZIE)- pClient->getLastPos(), 0);
 		_pNetEvent->OnNetRecv(pClient);
 		//printf("nLen=%d\n", nLen);
 		if (nLen <= 0)
