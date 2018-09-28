@@ -44,7 +44,7 @@ public:
 	}
 
 	//申请内存
-	void* allocMem(size_t nSize)
+	void* allocMemory(size_t nSize)
 	{
 		if (!_pBuf)
 		{
@@ -68,12 +68,25 @@ public:
 			pReturn->nRef = 1;
 		}
 
-		return pReturn;
+		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
 	//释放内存
-	void freeMem(void* p)
+	void freeMemory(void* pMem)
 	{
-		free(p);
+		MemoryBlock* pBlock = (MemoryBlock*)( (char*)pMem  - sizeof(MemoryBlock));
+		assert(1 == pBlock->nRef);
+		if (--pBlock->nRef != 0)
+		{
+			return;
+		}
+		if (pBlock->bPool)
+		{
+			pBlock->pNext = _pHeader;
+			_pHeader = pBlock;
+		}
+		else {
+			free(pMem);
+		}
 	}
 
 	//初始化
