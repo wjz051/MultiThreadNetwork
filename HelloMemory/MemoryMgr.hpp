@@ -3,6 +3,7 @@
 #include<stdlib.h>
 #include<assert.h>
 
+#define MAX_MEMORY_SZIE 64
 class MemoryAlloc;
 //内存块 最小单元
 class MemoryBlock
@@ -40,7 +41,8 @@ public:
 
 	~MemoryAlloc()
 	{
-
+		if (_pBuf)
+			free(_pBuf);
 	}
 
 	//申请内存
@@ -52,13 +54,14 @@ public:
 		}
 
 		MemoryBlock* pReturn = nullptr;
+		//_pHeader==nullptr说明当前内存池已满
 		if (nullptr == _pHeader)
 		{
 			pReturn = (MemoryBlock*)malloc(nSize+sizeof(MemoryBlock));
 			pReturn->bPool = false;
 			pReturn->nID = -1;
-			pReturn->nRef = 0;
-			pReturn->pAlloc = this;
+			pReturn->nRef = 1;
+			pReturn->pAlloc = nullptr;
 			pReturn->pNext = nullptr;
 		}
 		else {
@@ -67,12 +70,13 @@ public:
 			assert(0 == pReturn->nRef);
 			pReturn->nRef = 1;
 		}
-
+		//返回可用内存块首地址
 		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
 	//释放内存
 	void freeMemory(void* pMem)
 	{
+		//找到当前内存的内存块地址
 		MemoryBlock* pBlock = (MemoryBlock*)( (char*)pMem  - sizeof(MemoryBlock));
 		assert(1 == pBlock->nRef);
 		if (--pBlock->nRef != 0)
@@ -85,7 +89,7 @@ public:
 			_pHeader = pBlock;
 		}
 		else {
-			free(pMem);
+			free(pBlock);
 		}
 	}
 
@@ -121,7 +125,7 @@ public:
 			pTemp1 = pTemp2;
 		}
 	}
-private:
+protected:
 	//内存池地址
 	char* _pBuf;
 	//头部内存单元
@@ -130,6 +134,20 @@ private:
 	size_t _nSzie;
 	//内存单元的数量
 	size_t _nBlockSzie;
+};
+
+template<size_t nSzie,size_t nBlockSzie>
+class MemoryAlloctor :public MemoryAlloc
+{
+public:
+	MemoryAlloctor()
+	{
+		//8 4   61/8=7  61%8=5
+		const size_t n = sizeof(void*);
+		//(7*8)+8 
+		_nSzie = (nSzie/n)*n +(nSzie % n ? n : 0);
+		_nBlockSzie = nBlockSzie;
+	}
 
 };
 
@@ -139,13 +157,14 @@ class MemoryMgr
 private:
 	MemoryMgr()
 	{
-
+		init(0, 64, &_mem64);
 	}
 
 	~MemoryMgr()
 	{
 
 	}
+
 public:
 	static MemoryMgr& Instance()
 	{//单例模式 静态
@@ -155,16 +174,56 @@ public:
 	//申请内存
 	void* allocMem(size_t nSize)
 	{
-		return malloc(nSize);
+		if (nSize <= MAX_MEMORY_SZIE)
+		{
+			return _szAlloc[nSize]->allocMemory(nSize);
+		}
+		else 
+		{
+			MemoryBlock* pReturn = (MemoryBlock*)malloc(nSize + sizeof(MemoryBlock));
+			pReturn->bPool = false;
+			pReturn->nID = -1;
+			pReturn->nRef = 1;
+			pReturn->pAlloc = nullptr;
+			pReturn->pNext = nullptr;
+			return pReturn;
+		}
+		
 	}
-	//释放内存
 
-	void freeMem(void* p)
+	//释放内存
+	void freeMem(void* pMem)
 	{
-		free(p);
+		MemoryBlock* pBlock = (MemoryBlock*)((char*)pMem - sizeof(MemoryBlock));
+		if (pBlock->bPool)
+		{
+			pBlock->pAlloc->freeMemory(pMem);
+		}
+		else 
+		{
+			if (--pBlock->nRef == 0)
+				free(pMem);
+		}
+	}
+
+	//增加内存块的引用计数
+	void addRef(void* pMem)
+	{
+		MemoryBlock* pBlock = (MemoryBlock*)((char*)pMem - sizeof(MemoryBlock));
+		++pBlock->nRef;
 	}
 private:
-
+	//初始化内存池映射数组
+	void init(int nBegin, int nEnd, MemoryAlloc* pMemA)
+	{
+		for (int n = nBegin; n <= nEnd; n++)
+		{
+			_szAlloc[n] = pMemA;
+		}
+	}
+private:
+	MemoryAlloctor<64,10> _mem64;
+	MemoryAlloc* _szAlloc[MAX_MEMORY_SZIE + 1];
 };
 
 #endif // !_MemoryMgr_hpp_
