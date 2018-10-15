@@ -3,7 +3,9 @@
 #include<stdlib.h>
 #include<assert.h>
 
+
 #define MAX_MEMORY_SZIE 64
+
 class MemoryAlloc;
 //内存块 最小单元
 class MemoryBlock
@@ -25,7 +27,6 @@ private:
 	char c2;
 	char c3;
 };
-//const int MemoryBlockSize = sizeof(MemoryBlock);
 
 //内存池
 class MemoryAlloc
@@ -73,6 +74,7 @@ public:
 		//返回可用内存块首地址
 		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
+
 	//释放内存
 	void freeMemory(void* pMem)
 	{
@@ -97,10 +99,10 @@ public:
 	void initMemory()
 	{	//断言
 		assert(nullptr == _pBuf);
-		if (!_pBuf)
+		if (_pBuf)
 			return;
 		//计算内存池的大小
-		size_t bufSize = _nSzie*_nBlockSzie;
+		size_t bufSize = (_nSzie+ sizeof(MemoryBlock))*_nBlockSzie;
 		//向系统申请池的内存
 		_pBuf = (char*)malloc(bufSize);
 
@@ -117,7 +119,7 @@ public:
 		{
 			MemoryBlock* pTemp2 = (MemoryBlock*)(_pBuf + (n*_nSzie));
 			pTemp2->bPool = true;
-			pTemp2->nID = 0;
+			pTemp2->nID = n;
 			pTemp2->nRef = 0;
 			pTemp2->pAlloc = this;
 			pTemp2->pNext = nullptr;
@@ -136,6 +138,7 @@ protected:
 	size_t _nBlockSzie;
 };
 
+//便于在声明类成员变量时初始化MemoryAlloc的成员数据
 template<size_t nSzie,size_t nBlockSzie>
 class MemoryAlloctor :public MemoryAlloc
 {
@@ -186,7 +189,7 @@ public:
 			pReturn->nRef = 1;
 			pReturn->pAlloc = nullptr;
 			pReturn->pNext = nullptr;
-			return pReturn;
+			return ((char*)pReturn + sizeof(MemoryBlock));
 		}
 		
 	}
@@ -202,7 +205,7 @@ public:
 		else 
 		{
 			if (--pBlock->nRef == 0)
-				free(pMem);
+				free(pBlock);
 		}
 	}
 
