@@ -2,9 +2,17 @@
 #define _MemoryMgr_hpp_
 #include<stdlib.h>
 #include<assert.h>
+#include<mutex>//锁
+
+#ifdef _DEBUG
+#include<stdio.h>
+	#define xPrintf(...) printf(__VA_ARGS__)
+#else
+	#define xPrintf(...)
+#endif // _DEBUG
 
 
-#define MAX_MEMORY_SZIE 64
+#define MAX_MEMORY_SZIE 1024
 
 class MemoryAlloc;
 //内存块 最小单元
@@ -38,6 +46,7 @@ public:
 		_pHeader = nullptr;
 		_nSzie = 0;
 		_nBlockSzie = 0;
+		xPrintf("MemoryAlloc\n");
 	}
 
 	~MemoryAlloc()
@@ -49,11 +58,12 @@ public:
 	//申请内存
 	void* allocMemory(size_t nSize)
 	{
+		std::lock_guard<std::mutex> lg(_mutex);
 		if (!_pBuf)
 		{
 			initMemory();
 		}
-
+		
 		MemoryBlock* pReturn = nullptr;
 		//_pHeader==nullptr说明当前内存池已满
 		if (nullptr == _pHeader)
@@ -71,6 +81,7 @@ public:
 			assert(0 == pReturn->nRef);
 			pReturn->nRef = 1;
 		}
+		//xPrintf("allocMem: %llx, id=%d, size=%d\n", pReturn, pReturn->nID, nSize);
 		//返回可用内存块首地址
 		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
@@ -81,28 +92,36 @@ public:
 		//找到当前内存的内存块地址
 		MemoryBlock* pBlock = (MemoryBlock*)( (char*)pMem  - sizeof(MemoryBlock));
 		assert(1 == pBlock->nRef);
-		if (--pBlock->nRef != 0)
-		{
-			return;
-		}
 		if (pBlock->bPool)
 		{
+			std::lock_guard<std::mutex> lg(_mutex);
+			if (--pBlock->nRef != 0)
+			{
+				return;
+			}
 			pBlock->pNext = _pHeader;
 			_pHeader = pBlock;
 		}
 		else {
+			if (--pBlock->nRef != 0)
+			{
+				return;
+			}
 			free(pBlock);
 		}
 	}
 
 	//初始化
 	void initMemory()
-	{	//断言
+	{
+		xPrintf("initMemory:_nSzie=%d,_nBlockSzie=%d\n", _nSzie, _nBlockSzie);
+		//断言
 		assert(nullptr == _pBuf);
 		if (_pBuf)
 			return;
 		//计算内存池的大小
-		size_t bufSize = (_nSzie+ sizeof(MemoryBlock))*_nBlockSzie;
+		size_t realSzie = _nSzie + sizeof(MemoryBlock);
+		size_t bufSize = realSzie*_nBlockSzie;
 		//向系统申请池的内存
 		_pBuf = (char*)malloc(bufSize);
 
@@ -115,9 +134,10 @@ public:
 		_pHeader->pNext = nullptr;
 		//遍历内存块进行初始化
 		MemoryBlock* pTemp1 = _pHeader;
+		
 		for (size_t n = 1; n < _nBlockSzie; n++)
 		{
-			MemoryBlock* pTemp2 = (MemoryBlock*)(_pBuf + (n*_nSzie));
+			MemoryBlock* pTemp2 = (MemoryBlock*)(_pBuf + (n* realSzie));
 			pTemp2->bPool = true;
 			pTemp2->nID = n;
 			pTemp2->nRef = 0;
@@ -136,6 +156,7 @@ protected:
 	size_t _nSzie;
 	//内存单元的数量
 	size_t _nBlockSzie;
+	std::mutex _mutex;
 };
 
 //便于在声明类成员变量时初始化MemoryAlloc的成员数据
@@ -160,7 +181,12 @@ class MemoryMgr
 private:
 	MemoryMgr()
 	{
-		init(0, 64, &_mem64);
+		init_szAlloc(0, 64, &_mem64);
+		init_szAlloc(65, 128, &_mem128);
+		init_szAlloc(129, 256, &_mem256);
+		init_szAlloc(257, 512, &_mem512);
+		init_szAlloc(513, 1024, &_mem1024);
+		xPrintf("MemoryMgr\n");
 	}
 
 	~MemoryMgr()
@@ -189,6 +215,7 @@ public:
 			pReturn->nRef = 1;
 			pReturn->pAlloc = nullptr;
 			pReturn->pNext = nullptr;
+			//xPrintf("allocMem: %llx, id=%d, size=%d\n", pReturn , pReturn->nID, nSize);
 			return ((char*)pReturn + sizeof(MemoryBlock));
 		}
 		
@@ -198,6 +225,7 @@ public:
 	void freeMem(void* pMem)
 	{
 		MemoryBlock* pBlock = (MemoryBlock*)((char*)pMem - sizeof(MemoryBlock));
+		//xPrintf("freeMem: %llx, id=%d\n", pBlock, pBlock->nID);
 		if (pBlock->bPool)
 		{
 			pBlock->pAlloc->freeMemory(pMem);
@@ -217,7 +245,7 @@ public:
 	}
 private:
 	//初始化内存池映射数组
-	void init(int nBegin, int nEnd, MemoryAlloc* pMemA)
+	void init_szAlloc(int nBegin, int nEnd, MemoryAlloc* pMemA)
 	{
 		for (int n = nBegin; n <= nEnd; n++)
 		{
@@ -225,7 +253,11 @@ private:
 		}
 	}
 private:
-	MemoryAlloctor<64,10> _mem64;
+	MemoryAlloctor<64, 100000> _mem64;
+	MemoryAlloctor<128, 100000> _mem128;
+	MemoryAlloctor<256, 100000> _mem256;
+	MemoryAlloctor<512, 100000> _mem512;
+	MemoryAlloctor<1024, 100000> _mem1024;
 	MemoryAlloc* _szAlloc[MAX_MEMORY_SZIE + 1];
 };
 
