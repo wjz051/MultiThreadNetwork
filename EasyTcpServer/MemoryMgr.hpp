@@ -12,7 +12,7 @@
 #endif // _DEBUG
 
 
-#define MAX_MEMORY_SZIE 1024
+#define MAX_MEMORY_SZIE 128
 
 class MemoryAlloc;
 //内存块 最小单元
@@ -65,7 +65,6 @@ public:
 		}
 		
 		MemoryBlock* pReturn = nullptr;
-		//_pHeader==nullptr说明当前内存池已满
 		if (nullptr == _pHeader)
 		{
 			pReturn = (MemoryBlock*)malloc(nSize+sizeof(MemoryBlock));
@@ -82,14 +81,12 @@ public:
 			pReturn->nRef = 1;
 		}
 		xPrintf("allocMem: %llx, id=%d, size=%d\n", pReturn, pReturn->nID, nSize);
-		//返回可用内存块首地址
 		return ((char*)pReturn + sizeof(MemoryBlock));
 	}
 
 	//释放内存
 	void freeMemory(void* pMem)
 	{
-		//找到当前内存的内存块地址
 		MemoryBlock* pBlock = (MemoryBlock*)( (char*)pMem  - sizeof(MemoryBlock));
 		assert(1 == pBlock->nRef);
 		if (pBlock->bPool)
@@ -183,9 +180,9 @@ private:
 	{
 		init_szAlloc(0, 64, &_mem64);
 		init_szAlloc(65, 128, &_mem128);
-		init_szAlloc(129, 256, &_mem256);
-		init_szAlloc(257, 512, &_mem512);
-		init_szAlloc(513, 1024, &_mem1024);
+		//init_szAlloc(129, 256, &_mem256);
+		//init_szAlloc(257, 512, &_mem512);
+		//init_szAlloc(513, 1024, &_mem1024);
 		xPrintf("MemoryMgr\n");
 	}
 
@@ -253,11 +250,11 @@ private:
 		}
 	}
 private:
-	MemoryAlloctor<64, 100000> _mem64;
-	MemoryAlloctor<128, 100000> _mem128;
-	MemoryAlloctor<256, 100000> _mem256;
-	MemoryAlloctor<512, 100000> _mem512;
-	MemoryAlloctor<1024, 100000> _mem1024;
+	MemoryAlloctor<64, 1000000> _mem64;
+	MemoryAlloctor<128, 1000000> _mem128;
+	//MemoryAlloctor<256, 100000> _mem256;
+	//MemoryAlloctor<512, 100000> _mem512;
+	//MemoryAlloctor<1024, 100000> _mem1024;
 	MemoryAlloc* _szAlloc[MAX_MEMORY_SZIE + 1];
 };
 
