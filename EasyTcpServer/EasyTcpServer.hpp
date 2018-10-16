@@ -25,6 +25,7 @@
 #include<thread>
 #include<mutex>
 #include<atomic>
+#include<memory>
 
 #include"MessageHeader.hpp"
 #include"CELLTimestamp.hpp"
@@ -49,6 +50,9 @@ FD_ISSET(fd, &set); /*ÔÚµ÷ÓÃselect()º¯Êıºó£¬ÓÃFD_ISSETÀ´¼ì²âfdÊÇ·ñÔÚset¼¯ºÏÖĞ£¬µ
 #define RECV_BUFF_SZIE 10240*5
 #define SEND_BUFF_SZIE RECV_BUFF_SZIE
 #endif // !RECV_BUFF_SZIE
+
+typedef std::shared_ptr<DataHeader> DataHeaderPtr;
+typedef std::shared_ptr<LoginResult> LoginResultPtr;
 
 //¿Í»§¶ËÊı¾İÀàĞÍ
 class ClientSocket 
@@ -84,13 +88,13 @@ public:
 	}
 
 	//·¢ËÍÊı¾İ
-	int SendData(DataHeader* header)
+	int SendData(DataHeaderPtr header)
 	{
 		int ret = SOCKET_ERROR;
 		//Òª·¢ËÍµÄÊı¾İ³¤¶È
 		int nSendLen = header->dataLength;
 		//Òª·¢ËÍµÄÊı¾İ
-		const char* pSendData = (const char*)header;
+		const char* pSendData = (const char*)header.get();
 
 		while (true)
 		{
@@ -137,6 +141,7 @@ private:
 	//·¢ËÍ»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃ
 	int _lastSendPos;
 };
+typedef std::shared_ptr<ClientSocket> ClientSocketPtr;
 
 class CellServer;
 //ÍøÂçÊÂ¼ş½Ó¿Ú
@@ -145,24 +150,24 @@ class INetEvent
 public:
 	//´¿Ğéº¯Êı
 	//¿Í»§¶Ë¼ÓÈëÊÂ¼ş
-	virtual void OnNetJoin(ClientSocket* pClient) = 0;
+	virtual void OnNetJoin(ClientSocketPtr pClient) = 0;
 	//¿Í»§¶ËÀë¿ªÊÂ¼ş
-	virtual void OnNetLeave(ClientSocket* pClient) = 0;
+	virtual void OnNetLeave(ClientSocketPtr pClient) = 0;
 	//¿Í»§¶ËÏûÏ¢ÊÂ¼ş
-	virtual void OnNetMsg(CellServer* pCellServer, ClientSocket* pClient, DataHeader* header) = 0;
+	virtual void OnNetMsg(CellServer* pCellServer, ClientSocketPtr pClient, DataHeader* header) = 0;
 	//recvÊÂ¼ş
-	virtual void OnNetRecv(ClientSocket* pClient) = 0;
+	virtual void OnNetRecv(ClientSocketPtr pClient) = 0;
 private:
 
 };
 
 //ÍøÂçÏûÏ¢·¢ËÍÈÎÎñ
-class CellSendMsg2ClientTask:public CellTask
+class CellS2CTask:public CellTask
 {
-	ClientSocket* _pClient;
-	DataHeader* _pHeader;
+	ClientSocketPtr _pClient;
+	DataHeaderPtr _pHeader;
 public:
-	CellSendMsg2ClientTask(ClientSocket* pClient, DataHeader* header)
+	CellS2CTask(ClientSocketPtr pClient, DataHeaderPtr header)
 	{
 		_pClient = pClient;
 		_pHeader = header;
@@ -172,9 +177,9 @@ public:
 	void doTask()
 	{
 		_pClient->SendData(_pHeader);
-		delete _pHeader;
 	}
 };
+typedef std::shared_ptr<CellS2CTask> CellS2CTaskPtr;
 
 //ÍøÂçÏûÏ¢½ÓÊÕ´¦Àí·şÎñÀà
 class CellServer
@@ -206,7 +211,6 @@ public:
 			for (auto iter : _clients)
 			{
 				closesocket(iter.second->sockfd());
-				delete iter.second;
 			}
 			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			closesocket(_sock);
@@ -214,7 +218,6 @@ public:
 			for (auto iter : _clients)
 			{
 				close(iter.second->sockfd());
-				delete iter.second;
 			}
 			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			close(_sock);
@@ -315,7 +318,7 @@ public:
 
 			}
 #else
-			std::vector<ClientSocket*> temp;
+			std::vector<ClientSocketPtr> temp;
 			for (auto iter : _clients)
 			{
 				if (FD_ISSET(iter.second->sockfd(), &fdRead))
@@ -332,13 +335,12 @@ public:
 			for (auto pClient : temp)
 			{
 				_clients.erase(pClient->sockfd());
-				delete pClient;
 			}
 #endif
 		}
 	}
 	//½ÓÊÕÊı¾İ ´¦ÀíÕ³°ü ²ğ·Ö°ü
-	int RecvData(ClientSocket* pClient)
+	int RecvData(ClientSocketPtr pClient)
 	{
 
 		//½ÓÊÕ¿Í»§¶ËÊı¾İ
@@ -382,12 +384,12 @@ public:
 	}
 
 	//ÏìÓ¦ÍøÂçÏûÏ¢
-	virtual void OnNetMsg(ClientSocket* pClient, DataHeader* header)
+	virtual void OnNetMsg(ClientSocketPtr pClient, DataHeader* header)
 	{
 		_pNetEvent->OnNetMsg(this, pClient, header);
 	}
 
-	void addClient(ClientSocket* pClient)
+	void addClient(ClientSocketPtr pClient)
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
 		//_mutex.lock();
@@ -406,17 +408,17 @@ public:
 		return _clients.size() + _clientsBuff.size();
 	}
 
-	void addSendTask(ClientSocket* pClient, DataHeader* header)
+	void addSendTask(ClientSocketPtr pClient, DataHeaderPtr header)
 	{
-		CellSendMsg2ClientTask* task = new CellSendMsg2ClientTask(pClient, header);
-		_taskServer.addTask(task);
+		auto task = std::make_shared<CellS2CTask>(pClient, header);
+		_taskServer.addTask((CellTaskPtr)task);
 	}
 private:
 	SOCKET _sock;
 	//ÕıÊ½¿Í»§¶ÓÁĞ
-	std::map<SOCKET,ClientSocket*> _clients;
+	std::map<SOCKET,ClientSocketPtr> _clients;
 	//»º³å¿Í»§¶ÓÁĞ
-	std::vector<ClientSocket*> _clientsBuff;
+	std::vector<ClientSocketPtr> _clientsBuff;
 	//»º³å¶ÓÁĞµÄËø
 	std::mutex _mutex;
 	std::thread _thread;
@@ -425,13 +427,13 @@ private:
 	//
 	CellTaskServer _taskServer;
 };
-
+typedef std::shared_ptr<CellServer> CellServerPtr;
 class EasyTcpServer : public INetEvent
 {
 private:
 	SOCKET _sock;
 	//ÏûÏ¢´¦Àí¶ÔÏó£¬ÄÚ²¿»á´´½¨Ïß³Ì
-	std::vector<CellServer*> _cellServers;
+	std::vector<CellServerPtr> _cellServers;
 	//Ã¿ÃëÏûÏ¢¼ÆÊ±
 	CELLTimestamp _tTime;
 protected:
@@ -550,13 +552,14 @@ public:
 		else
 		{
 			//½«ĞÂ¿Í»§¶Ë·ÖÅä¸ø¿Í»§ÊıÁ¿×îÉÙµÄcellServer
-			addClientToCellServer(new ClientSocket(cSock));
+			
+			addClientToCellServer(std::make_shared<ClientSocket>(cSock));
 			//»ñÈ¡IPµØÖ· inet_ntoa(clientAddr.sin_addr)
 		}
 		return cSock;
 	}
 	
-	void addClientToCellServer(ClientSocket* pClient)
+	void addClientToCellServer(ClientSocketPtr pClient)
 	{
 		//²éÕÒ¿Í»§ÊıÁ¿×îÉÙµÄCellServerÏûÏ¢´¦Àí¶ÔÏó
 		auto pMinServer = _cellServers[0];
@@ -575,7 +578,7 @@ public:
 	{
 		for (int n = 0; n < nCellServer; n++)
 		{
-			auto ser = new CellServer(_sock);
+			auto ser = std::make_shared<CellServer>(_sock);
 			_cellServers.push_back(ser);
 			//×¢²áÍøÂçÊÂ¼ş½ÓÊÜ¶ÔÏó
 			ser->setEventObj(this);
@@ -652,26 +655,26 @@ public:
 		}
 	}
 	//Ö»»á±»Ò»¸öÏß³Ì´¥·¢ °²È«
-	virtual void OnNetJoin(ClientSocket* pClient)
+	virtual void OnNetJoin(ClientSocketPtr pClient)
 	{
 		_clientCount++;
 		//printf("client<%d> join\n", pClient->sockfd());
 	}
 	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
 	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
-	virtual void OnNetLeave(ClientSocket* pClient)
+	virtual void OnNetLeave(ClientSocketPtr pClient)
 	{
 		_clientCount--;
 		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
 	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
-	virtual void OnNetMsg(CellServer* pCellServer, ClientSocket* pClient, DataHeader* header)
+	virtual void OnNetMsg(CellServer* pCellServer, ClientSocketPtr pClient, DataHeader* header)
 	{
 		_msgCount++;
 	}
 
-	virtual void OnNetRecv(ClientSocket* pClient)
+	virtual void OnNetRecv(ClientSocketPtr pClient)
 	{
 		_recvCount++;
 		//printf("client<%d> leave\n", pClient->sockfd());

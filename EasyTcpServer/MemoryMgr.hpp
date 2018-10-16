@@ -73,6 +73,7 @@ public:
 			pReturn->nRef = 1;
 			pReturn->pAlloc = nullptr;
 			pReturn->pNext = nullptr;
+			printf("allocMem: %llx, id=%d, size=%d\n", pReturn, pReturn->nID, nSize);
 		}
 		else {
 			pReturn = _pHeader;
@@ -250,8 +251,8 @@ private:
 		}
 	}
 private:
-	MemoryAlloctor<64, 1000000> _mem64;
-	MemoryAlloctor<128, 1000000> _mem128;
+	MemoryAlloctor<64, 4000000> _mem64;
+	MemoryAlloctor<128, 2000000> _mem128;
 	//MemoryAlloctor<256, 100000> _mem256;
 	//MemoryAlloctor<512, 100000> _mem512;
 	//MemoryAlloctor<1024, 100000> _mem1024;
