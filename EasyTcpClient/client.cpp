@@ -16,7 +16,8 @@ void cmdThread()
 			printf("退出cmdThread线程\n");
 			break;
 		}
-		else {
+		else 
+		{
 			printf("不支持的命令。\n");
 		}
 	}
@@ -28,6 +29,7 @@ const int cCount = 1000;
 const int tCount = 4;
 //客户端数组
 EasyTcpClient* client[cCount];
+
 std::atomic_int sendCount = 0;
 std::atomic_int readyCount = 0;
 

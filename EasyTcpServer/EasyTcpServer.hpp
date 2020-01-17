@@ -82,6 +82,7 @@ public:
 	{
 		return _lastPos;
 	}
+	
 	void setLastPos(int pos)
 	{
 		_lastPos = pos;
@@ -131,19 +132,15 @@ public:
 private:
 	// socket fd_set  file desc set
 	SOCKET _sockfd;
-	//第二缓冲区 消息缓冲区
-	char _szMsgBuf[RECV_BUFF_SZIE];
-	//消息缓冲区的数据尾部位置
-	int _lastPos;
-
-	//第二缓冲区 发送缓冲区
-	char _szSendBuf[SEND_BUFF_SZIE];
-	//发送缓冲区的数据尾部位置
-	int _lastSendPos;
+	char _szMsgBuf[RECV_BUFF_SZIE];//第二缓冲区 消息缓冲区
+	int _lastPos;//消息缓冲区的数据尾部位置
+	char _szSendBuf[SEND_BUFF_SZIE];//第二缓冲区 发送缓冲区
+	int _lastSendPos;//发送缓冲区的数据尾部位置
 };
 typedef std::shared_ptr<ClientSocket> ClientSocketPtr;
 
 class CellServer;
+
 //网络事件接口
 class INetEvent
 {
@@ -233,11 +230,6 @@ public:
 	}
 
 	//处理网络消息
-	//备份客户socket fd_set
-	fd_set _fdRead_bak;
-	//客户列表是否有变化
-	bool _clients_change;
-	SOCKET _maxSock;
 	void OnRun()
 	{
 		_clients_change = true;
@@ -339,6 +331,7 @@ public:
 #endif
 		}
 	}
+	
 	//接收数据 处理粘包 拆分包
 	int RecvData(ClientSocketPtr pClient)
 	{
@@ -415,34 +408,33 @@ public:
 	}
 private:
 	SOCKET _sock;
-	//正式客户队列
-	std::map<SOCKET,ClientSocketPtr> _clients;
-	//缓冲客户队列
-	std::vector<ClientSocketPtr> _clientsBuff;
+	std::map<SOCKET,ClientSocketPtr> _clients;//正式客户队列
+	std::vector<ClientSocketPtr> _clientsBuff;//缓冲客户队列
 	//缓冲队列的锁
 	std::mutex _mutex;
 	std::thread _thread;
-	//网络事件对象
-	INetEvent* _pNetEvent;
-	//
-	CellTaskServer _taskServer;
+	INetEvent* _pNetEvent;//网络事件对象
+	CellTaskServer _taskServer;//
+
+	fd_set _fdRead_bak;//备份客户socket fd_set
+	bool _clients_change;//客户列表是否有变化
+	SOCKET _maxSock;
 };
 typedef std::shared_ptr<CellServer> CellServerPtr;
+
+/*服务器*/
 class EasyTcpServer : public INetEvent
 {
 private:
 	SOCKET _sock;
-	//消息处理对象，内部会创建线程
-	std::vector<CellServerPtr> _cellServers;
-	//每秒消息计时
-	CELLTimestamp _tTime;
+	std::vector<CellServerPtr> _cellServers;//消息处理对象，内部会创建线程
+	CELLTimestamp _tTime;//每秒消息计时
+
 protected:
-	//SOCKET recv计数
-	std::atomic_int _recvCount;
-	//收到消息计数
-	std::atomic_int _msgCount;
-	//客户端计数
-	std::atomic_int _clientCount;
+	std::atomic_int _recvCount;//SOCKET recv计数
+	std::atomic_int _msgCount;//收到消息计数
+	std::atomic_int _clientCount;//客户端计数
+
 public:
 	EasyTcpServer()
 	{
@@ -455,6 +447,7 @@ public:
 	{
 		Close();
 	}
+	
 	//初始化Socket
 	SOCKET InitSocket()
 	{
@@ -586,6 +579,7 @@ public:
 			ser->Start();
 		}
 	}
+	
 	//关闭Socket
 	void Close()
 	{
@@ -603,6 +597,7 @@ public:
 #endif
 		}
 	}
+	
 	//处理网络消息
 	bool OnRun()
 	{
@@ -636,6 +631,7 @@ public:
 		}
 		return false;
 	}
+	
 	//是否工作中
 	bool isRun()
 	{
@@ -654,12 +650,14 @@ public:
 			_tTime.update();
 		}
 	}
+	
 	//只会被一个线程触发 安全
 	virtual void OnNetJoin(ClientSocketPtr pClient)
 	{
 		_clientCount++;
 		//printf("client<%d> join\n", pClient->sockfd());
 	}
+	
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetLeave(ClientSocketPtr pClient)
@@ -667,6 +665,7 @@ public:
 		_clientCount--;
 		//printf("client<%d> leave\n", pClient->sockfd());
 	}
+	
 	//cellServer 4 多个线程触发 不安全
 	//如果只开启1个cellServer就是安全的
 	virtual void OnNetMsg(CellServer* pCellServer, ClientSocketPtr pClient, DataHeader* header)

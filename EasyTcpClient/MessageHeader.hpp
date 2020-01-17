@@ -11,6 +11,7 @@ enum CMD
 	CMD_ERROR
 };
 
+/*Êý¾ÝÍ·*/
 struct DataHeader
 {
 	DataHeader()
