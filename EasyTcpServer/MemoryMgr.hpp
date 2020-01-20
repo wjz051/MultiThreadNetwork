@@ -45,7 +45,7 @@ public:
 		_pBuf = nullptr;
 		_pHeader = nullptr;
 		_nSzie = 0;
-		_nCount = 0;
+		_nBlockSzie = 0;
 		xPrintf("MemoryAlloc\n");
 	}
 
@@ -73,7 +73,7 @@ public:
 			pReturn->nRef = 1;
 			pReturn->pAlloc = nullptr;
 			pReturn->pNext = nullptr;
-			printf("allocMem: %llx, id=%d, size=%d\n", pReturn, pReturn->nID, nSize);
+			//printf("allocMem: %llx, id=%d, size=%d\n", pReturn, pReturn->nID, nSize);
 		}
 		else {
 			pReturn = _pHeader;
@@ -112,14 +112,14 @@ public:
 	//初始化
 	void initMemory()
 	{
-		xPrintf("initMemory:_nSzie=%d,_nBlockSzie=%d\n", _nSzie, _nCount);
+		xPrintf("initMemory:_nSzie=%d,_nBlockSzie=%d\n", _nSzie, _nBlockSzie);
 		//断言
 		assert(nullptr == _pBuf);
 		if (_pBuf)
 			return;
 		//计算内存池的大小
 		size_t realSzie = _nSzie + sizeof(MemoryBlock);
-		size_t bufSize = realSzie*_nCount;
+		size_t bufSize = realSzie*_nBlockSzie;
 		//向系统申请池的内存
 		_pBuf = (char*)malloc(bufSize);
 
@@ -133,7 +133,7 @@ public:
 		//遍历内存块进行初始化
 		MemoryBlock* pTemp1 = _pHeader;
 		
-		for (size_t n = 1; n < _nCount; n++)
+		for (size_t n = 1; n < _nBlockSzie; n++)
 		{
 			MemoryBlock* pTemp2 = (MemoryBlock*)(_pBuf + (n* realSzie));
 			pTemp2->bPool = true;
@@ -153,12 +153,12 @@ protected:
 	//内存单元的大小
 	size_t _nSzie;
 	//内存单元的数量
-	size_t _nCount;
+	size_t _nBlockSzie;
 	std::mutex _mutex;
 };
 
 //便于在声明类成员变量时初始化MemoryAlloc的成员数据
-template<size_t nSzie,size_t nCount>
+template<size_t nSzie,size_t nBlockSzie>
 class MemoryAlloctor :public MemoryAlloc
 {
 public:
@@ -168,7 +168,7 @@ public:
 		const size_t n = sizeof(void*);
 		//(7*8)+8 
 		_nSzie = (nSzie/n)*n +(nSzie % n ? n : 0);
-		_nCount = nCount;
+		_nBlockSzie = nBlockSzie;
 	}
 
 };
