@@ -1,7 +1,7 @@
 #include"EasyTcpClient.hpp"
 #include"CELLTimestamp.hpp"
-#include<thread>
-#include<atomic>
+#include "thread/thread.hpp"
+#include "atomic/atomic.hpp"
 
 bool g_bRun = true;
 void cmdThread()
@@ -28,8 +28,8 @@ const int cCount = 1000;
 const int tCount = 4;
 //客户端数组
 EasyTcpClient* client[cCount];
-std::atomic_int sendCount = 0;
-std::atomic_int readyCount = 0;
+boost::atomic_int sendCount = 0;
+boost::atomic_int readyCount = 0;
 
 void sendThread(int id)
 {
@@ -57,8 +57,8 @@ void sendThread(int id)
 	readyCount++;
 	while (readyCount < tCount)
 	{//等待其它线程准备好发送数据
-		std::chrono::milliseconds t(10);
-		std::this_thread::sleep_for(t);
+		boost::chrono::milliseconds t(10);
+		boost::this_thread::sleep_for(t);
 	}
 
 	Login login[10];
@@ -92,13 +92,13 @@ void sendThread(int id)
 int main()
 {
 	//启动UI线程
-	std::thread t1(cmdThread);
+	boost::thread t1(cmdThread);
 	t1.detach();
 
 	//启动发送线程
 	for (int n = 0; n < tCount; n++)
 	{
-		std::thread t1(sendThread,n+1);
+		boost::thread t1(sendThread,n+1);
 		t1.detach();
 	}
 

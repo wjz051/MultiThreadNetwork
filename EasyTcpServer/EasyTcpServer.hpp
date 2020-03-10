@@ -22,9 +22,10 @@
 #include<stdio.h>
 #include<vector>
 #include<map>
-#include<thread>
-#include<mutex>
-#include<atomic>
+#include "thread/thread.hpp"
+#include "thread/mutex.hpp"
+#include "atomic/atomic.hpp"
+#include "make_shared.hpp"
 #include<memory>
 
 #include"MessageHeader.hpp"
@@ -51,8 +52,8 @@ FD_ISSET(fd, &set); /*ÔÚµ÷ÓÃselect()º¯Êıºó£¬ÓÃFD_ISSETÀ´¼ì²âfdÊÇ·ñÔÚset¼¯ºÏÖĞ£¬µ
 #define SEND_BUFF_SZIE RECV_BUFF_SZIE
 #endif // !RECV_BUFF_SZIE
 
-typedef std::shared_ptr<DataHeader> DataHeaderPtr;
-typedef std::shared_ptr<LoginResult> LoginResultPtr;
+typedef boost::shared_ptr<DataHeader> DataHeaderPtr;
+typedef boost::shared_ptr<LoginResult> LoginResultPtr;
 
 //¿Í»§¶ËÊı¾İÀàĞÍ
 class ClientSocket 
@@ -141,7 +142,7 @@ private:
 	//·¢ËÍ»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃ
 	int _lastSendPos;
 };
-typedef std::shared_ptr<ClientSocket> ClientSocketPtr;
+typedef boost::shared_ptr<ClientSocket> ClientSocketPtr;
 
 class CellServer;
 //ÍøÂçÊÂ¼ş½Ó¿Ú
@@ -179,7 +180,7 @@ public:
 		_pClient->SendData(_pHeader);
 	}
 };
-typedef std::shared_ptr<CellS2CTask> CellS2CTaskPtr;
+typedef boost::shared_ptr<CellS2CTask> CellS2CTaskPtr;
 
 //ÍøÂçÏûÏ¢½ÓÊÕ´¦Àí·şÎñÀà
 class CellServer
@@ -208,7 +209,7 @@ public:
 		if (_sock != INVALID_SOCKET)
 		{
 #ifdef _WIN32
-			for (auto iter : _clients)
+			BOOST_FOREACH  (auto iter , _clients)
 			{
 				closesocket(iter.second->sockfd());
 			}
@@ -245,8 +246,8 @@ public:
 		{
 			if (!_clientsBuff.empty())
 			{//´Ó»º³å¶ÓÁĞÀïÈ¡³ö¿Í»§Êı¾İ
-				std::lock_guard<std::mutex> lock(_mutex);
-				for (auto pClient : _clientsBuff)
+				boost::lock_guard<boost::mutex> lock(_mutex);
+				BOOST_FOREACH  (auto pClient , _clientsBuff)
 				{
 					_clients[pClient->sockfd()] = pClient;
 				}
@@ -257,8 +258,8 @@ public:
 			//Èç¹ûÃ»ÓĞĞèÒª´¦ÀíµÄ¿Í»§¶Ë£¬¾ÍÌø¹ı
 			if (_clients.empty())
 			{
-				std::chrono::milliseconds t(1);
-				std::this_thread::sleep_for(t);
+				boost::chrono::milliseconds t(1);
+				boost::this_thread::sleep_for(t);
 				continue;
 			}
 
@@ -271,7 +272,7 @@ public:
 				_clients_change = false;
 				//½«ÃèÊö·û£¨socket£©¼ÓÈë¼¯ºÏ
 				_maxSock = _clients.begin()->second->sockfd();
-				for (auto iter : _clients)
+				BOOST_FOREACH  (auto iter , _clients)
 				{
 					FD_SET(iter.second->sockfd(), &fdRead);
 					if (_maxSock < iter.second->sockfd())
@@ -300,7 +301,7 @@ public:
 			}
 			
 #ifdef _WIN32
-			for (int n = 0; n < fdRead.fd_count; n++)
+			for (size_t n = 0; n < fdRead.fd_count; n++)
 			{
 				auto iter  = _clients.find(fdRead.fd_array[n]);
 				if (iter != _clients.end())
@@ -318,7 +319,7 @@ public:
 
 			}
 #else
-			std::vector<ClientSocketPtr> temp;
+			boost::vector<ClientSocketPtr> temp;
 			for (auto iter : _clients)
 			{
 				if (FD_ISSET(iter.second->sockfd(), &fdRead))
@@ -391,7 +392,7 @@ public:
 
 	void addClient(ClientSocketPtr pClient)
 	{
-		std::lock_guard<std::mutex> lock(_mutex);
+		boost::lock_guard<boost::mutex> lock(_mutex);
 		//_mutex.lock();
 		_clientsBuff.push_back(pClient);
 		//_mutex.unlock();
@@ -399,7 +400,7 @@ public:
 
 	void Start()
 	{
-		_thread = std::thread(std::mem_fn(&CellServer::OnRun), this);
+		_thread = boost::thread(boost::mem_fn(&CellServer::OnRun), this);
 		_taskServer.Start();
 	}
 
@@ -410,7 +411,7 @@ public:
 
 	void addSendTask(ClientSocketPtr pClient, DataHeaderPtr header)
 	{
-		auto task = std::make_shared<CellS2CTask>(pClient, header);
+		auto task = boost::make_shared<CellS2CTask>(pClient, header);
 		_taskServer.addTask((CellTaskPtr)task);
 	}
 private:
@@ -420,14 +421,14 @@ private:
 	//»º³å¿Í»§¶ÓÁĞ
 	std::vector<ClientSocketPtr> _clientsBuff;
 	//»º³å¶ÓÁĞµÄËø
-	std::mutex _mutex;
-	std::thread _thread;
+	boost::mutex _mutex;
+	boost::thread _thread;
 	//ÍøÂçÊÂ¼ş¶ÔÏó
 	INetEvent* _pNetEvent;
 	//
 	CellTaskServer _taskServer;
 };
-typedef std::shared_ptr<CellServer> CellServerPtr;
+typedef boost::shared_ptr<CellServer> CellServerPtr;
 class EasyTcpServer : public INetEvent
 {
 private:
@@ -438,11 +439,11 @@ private:
 	CELLTimestamp _tTime;
 protected:
 	//SOCKET recv¼ÆÊı
-	std::atomic_int _recvCount;
+	boost::atomic_int _recvCount;
 	//ÊÕµ½ÏûÏ¢¼ÆÊı
-	std::atomic_int _msgCount;
+	boost::atomic_int _msgCount;
 	//¿Í»§¶Ë¼ÆÊı
-	std::atomic_int _clientCount;
+	boost::atomic_int _clientCount;
 public:
 	EasyTcpServer()
 	{
@@ -553,7 +554,7 @@ public:
 		{
 			//½«ĞÂ¿Í»§¶Ë·ÖÅä¸ø¿Í»§ÊıÁ¿×îÉÙµÄcellServer
 			
-			addClientToCellServer(std::make_shared<ClientSocket>(cSock));
+			addClientToCellServer(boost::make_shared<ClientSocket>(cSock));
 			//»ñÈ¡IPµØÖ· inet_ntoa(clientAddr.sin_addr)
 		}
 		return cSock;
@@ -563,7 +564,7 @@ public:
 	{
 		//²éÕÒ¿Í»§ÊıÁ¿×îÉÙµÄCellServerÏûÏ¢´¦Àí¶ÔÏó
 		auto pMinServer = _cellServers[0];
-		for(auto pCellServer : _cellServers)
+		BOOST_FOREACH (auto pCellServer , _cellServers)
 		{
 			if (pMinServer->getClientCount() > pCellServer->getClientCount())
 			{
@@ -578,7 +579,7 @@ public:
 	{
 		for (int n = 0; n < nCellServer; n++)
 		{
-			auto ser = std::make_shared<CellServer>(_sock);
+			auto ser = boost::make_shared<CellServer>(_sock);
 			_cellServers.push_back(ser);
 			//×¢²áÍøÂçÊÂ¼ş½ÓÊÜ¶ÔÏó
 			ser->setEventObj(this);

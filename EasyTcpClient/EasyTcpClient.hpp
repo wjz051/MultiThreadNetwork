@@ -145,9 +145,9 @@ public:
 #define RECV_BUFF_SZIE 10240
 #endif // !RECV_BUFF_SZIE
 	//第二缓冲区 消息缓冲区
-	char _szMsgBuf[RECV_BUFF_SZIE * 5] = {};
+	char _szMsgBuf[RECV_BUFF_SZIE * 5];
 	//消息缓冲区的数据尾部位置
-	int _lastPos = 0;
+	int _lastPos;
 	//接收缓冲区
 	//char _szRecv[RECV_BUFF_SZIE] = {};
 

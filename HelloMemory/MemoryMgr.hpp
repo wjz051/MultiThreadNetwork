@@ -2,7 +2,8 @@
 #define _MemoryMgr_hpp_
 #include<stdlib.h>
 #include<assert.h>
-#include<mutex>//锁
+#include "thread/mutex.hpp"//锁
+#include "thread/lock_guard.hpp"
 
 #ifdef _DEBUG
 #include<stdio.h>
@@ -58,7 +59,7 @@ public:
 	//申请内存
 	void* allocMemory(size_t nSize)
 	{
-		std::lock_guard<std::mutex> lg(_mutex);
+		boost::lock_guard<boost::mutex> lg(_mutex);
 		if (!_pBuf)
 		{
 			initMemory();
@@ -94,7 +95,7 @@ public:
 		assert(1 == pBlock->nRef);
 		if (pBlock->bPool)
 		{
-			std::lock_guard<std::mutex> lg(_mutex);
+			boost::lock_guard<boost::mutex> lg(_mutex);
 			if (--pBlock->nRef != 0)
 			{
 				return;
@@ -156,7 +157,7 @@ protected:
 	size_t _nSzie;
 	//内存单元的数量
 	size_t _nBlockSzie;
-	std::mutex _mutex;
+	boost::mutex _mutex;
 };
 
 //便于在声明类成员变量时初始化MemoryAlloc的成员数据

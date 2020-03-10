@@ -3,8 +3,9 @@
 */
 #ifndef _CELL_TASK_H_
 
-#include<thread>
-#include<mutex>
+#include "thread/thread.hpp"
+#include "thread/mutex.hpp"
+#include "foreach.hpp"
 #include<list>
 
 //任务类型-基类
@@ -29,7 +30,7 @@ public:
 private:
 
 };
-typedef std::shared_ptr<CellTask> CellTaskPtr;
+typedef boost::shared_ptr<CellTask> CellTaskPtr;
 //执行任务的服务类型
 class CellTaskServer 
 {
@@ -39,19 +40,19 @@ private:
 	//任务数据缓冲区
 	std::list<CellTaskPtr> _tasksBuf;
 	//改变数据缓冲区时需要加锁
-	std::mutex _mutex;
+	boost::mutex _mutex;
 public:
 	//添加任务
 	void addTask(CellTaskPtr task)
 	{
-		std::lock_guard<std::mutex> lock(_mutex);
+		boost::lock_guard<boost::mutex> lock(_mutex);
 		_tasksBuf.push_back(task);
 	}
 	//启动工作线程
 	void Start()
 	{
 		//线程
-		std::thread t(std::mem_fn(&CellTaskServer::OnRun),this);
+		boost::thread t(boost::mem_fn(&CellTaskServer::OnRun),this);
 		t.detach();
 	}
 protected:
@@ -63,8 +64,8 @@ protected:
 			//从缓冲区取出数据
 			if (!_tasksBuf.empty())
 			{
-				std::lock_guard<std::mutex> lock(_mutex);
-				for (auto pTask : _tasksBuf)
+				boost::lock_guard<boost::mutex> lock(_mutex);
+				BOOST_FOREACH (auto pTask , _tasksBuf)
 				{
 					_tasks.push_back(pTask);
 				}
@@ -73,12 +74,12 @@ protected:
 			//如果没有任务
 			if (_tasks.empty())
 			{
-				std::chrono::milliseconds t(1);
-				std::this_thread::sleep_for(t);
+				boost::chrono::milliseconds t(1);
+				boost::this_thread::sleep_for(t);
 				continue;
 			}
 			//处理任务
-			for (auto pTask : _tasks)
+			BOOST_FOREACH (auto pTask , _tasks)
 			{
 				pTask->doTask();
 			}

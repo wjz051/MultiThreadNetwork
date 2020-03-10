@@ -1,9 +1,10 @@
 #include<iostream>
-#include<thread>
-#include<mutex>//锁
-#include<atomic>//原子
+#include "thread/thread.hpp"
+#include "thread/mutex.hpp"//锁
+#include "atomic/atomic.hpp"//原子
 #include"CELLTimestamp.hpp"
 using namespace std;
+using namespace boost;
 
 const int tCount = 4;
 atomic_int sum = 0;

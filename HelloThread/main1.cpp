@@ -1,6 +1,7 @@
 #include<iostream>
-#include<thread>
+#include"thread/thread.hpp"
 using namespace std;
+using namespace boost;
 
 void workFun()
 {

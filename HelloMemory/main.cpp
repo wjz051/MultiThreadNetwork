@@ -1,11 +1,14 @@
 #include"Alloctor.h"
 #include<stdlib.h>
 #include<iostream>
-#include<thread>
-#include<mutex>//锁
+#include "thread/thread.hpp"
+#include "thread/mutex.hpp"//锁
+#include "shared_ptr.hpp"
+#include "make_shared.hpp"
 #include<memory>
 #include"CELLTimestamp.hpp"
 using namespace std;
+using namespace boost;
 //原子操作   原子 分子 
 mutex m;
 const int tCount = 8;
@@ -38,7 +41,7 @@ public:
 		printf("~ClassA\n");
 	}
 public:
-	int num = 0;
+	int num;
 };
 
 
@@ -48,7 +51,7 @@ ClassA& fun(ClassA& pA)
 	return pA;
 }
 
-void fun(shared_ptr<ClassA>& pA)
+void fun(boost::shared_ptr<ClassA>& pA)
 {//引用计数  
 	pA->num++;
 }
@@ -87,7 +90,7 @@ int main()
 	//printf("b=%d\n", *b);
 	*/
 	{
-		shared_ptr<ClassA> b = make_shared<ClassA>(100);
+		boost::shared_ptr<ClassA> b = boost::make_shared<ClassA>(100);
 		b->num = 200;
 		CELLTimestamp tTime;
 		for (int n = 0; n < 100000000; n++)

@@ -1,6 +1,6 @@
 #include "Alloctor.h"
 #include "EasyTcpServer.hpp"
-#include<thread>
+#include "thread/thread.hpp"
 
 bool g_bRun = true;
 void cmdThread()
@@ -51,7 +51,7 @@ public:
 			//忽略判断用户密码是否正确的过程
 			//LoginResult ret;
 			//pClient->SendData(&ret);
-			auto ret = std::make_shared<LoginResult>();
+			auto ret = boost::make_shared<LoginResult>();
 			pCellServer->addSendTask(pClient, (DataHeaderPtr)ret);
 		}//接收 消息---处理 发送   生产者 数据缓冲区  消费者 
 		break;
@@ -87,7 +87,7 @@ int main()
 	server.Start(4);
 
 	//启动UI线程
-	std::thread t1(cmdThread);
+	boost::thread t1(cmdThread);
 	t1.detach();
 
 	while (g_bRun)

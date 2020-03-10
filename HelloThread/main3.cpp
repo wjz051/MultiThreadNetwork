@@ -1,8 +1,9 @@
 #include<iostream>
-#include<thread>
-#include<mutex>//Ëø
+#include "thread/thread.hpp"
+#include "thread/mutex.hpp"//Ëø
 #include"CELLTimestamp.hpp"
 using namespace std;
+using namespace boost;
 
 mutex m;
 const int tCount = 4;

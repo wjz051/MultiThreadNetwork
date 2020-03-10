@@ -2,8 +2,8 @@
 #define _CELLTimestamp_hpp_
 
 //#include <windows.h>
-#include<chrono>
-using namespace std::chrono;
+#include "chrono/chrono.hpp"
+using namespace boost::chrono;
 
 class CELLTimestamp
 {
