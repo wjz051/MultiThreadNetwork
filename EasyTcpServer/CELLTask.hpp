@@ -1,66 +1,60 @@
-/*
-	v1.0
-*/
-#ifndef _CELL_TASK_H_
+ï»¿#ifndef _CELL_TASK_H_
+#define _CELL_TASK_H_
 
 #include<thread>
 #include<mutex>
 #include<list>
 
-//ÈÎÎñÀàĞÍ-»ùÀà
-class CellTask
+#include<functional>
+
+#include"CELLThread.hpp"
+
+
+//æ‰§è¡Œä»»åŠ¡çš„æœåŠ¡ç±»å‹
+class CELLTaskServer 
 {
 public:
-	CellTask()
-	{
-
-	}
-
-	//ĞéÎö¹¹
-	virtual ~CellTask()
-	{
-
-	}
-	//Ö´ĞĞÈÎÎñ
-	virtual void doTask()
-	{
-
-	}
+	//æ‰€å±serverid
+	int serverId = -1;
 private:
-
-};
-typedef std::shared_ptr<CellTask> CellTaskPtr;
-//Ö´ĞĞÈÎÎñµÄ·şÎñÀàĞÍ
-class CellTaskServer 
-{
+	typedef std::function<void()> CELLTask;
 private:
-	//ÈÎÎñÊı¾İ
-	std::list<CellTaskPtr> _tasks;
-	//ÈÎÎñÊı¾İ»º³åÇø
-	std::list<CellTaskPtr> _tasksBuf;
-	//¸Ä±äÊı¾İ»º³åÇøÊ±ĞèÒª¼ÓËø
+	//ä»»åŠ¡æ•°æ®
+	std::list<CELLTask> _tasks;
+	//ä»»åŠ¡æ•°æ®ç¼“å†²åŒº
+	std::list<CELLTask> _tasksBuf;
+	//æ”¹å˜æ•°æ®ç¼“å†²åŒºæ—¶éœ€è¦åŠ é”
 	std::mutex _mutex;
+	//
+	CELLThread _thread;
 public:
-	//Ìí¼ÓÈÎÎñ
-	void addTask(CellTaskPtr task)
+	//æ·»åŠ ä»»åŠ¡
+	void addTask(CELLTask task)
 	{
 		std::lock_guard<std::mutex> lock(_mutex);
 		_tasksBuf.push_back(task);
 	}
-	//Æô¶¯¹¤×÷Ïß³Ì
+	//å¯åŠ¨å·¥ä½œçº¿ç¨‹
 	void Start()
 	{
-		//Ïß³Ì
-		std::thread t(std::mem_fn(&CellTaskServer::OnRun),this);
-		t.detach();
+		_thread.Start(nullptr, [this](CELLThread* pThread) {
+			OnRun(pThread);
+		});
+	}
+
+	void Close()
+	{
+		printf("CELLTaskServer%d.Close begin\n", serverId);
+		_thread.Close();
+		printf("CELLTaskServer%d.Close end\n", serverId);
 	}
 protected:
-	//¹¤×÷º¯Êı
-	void OnRun()
+	//å·¥ä½œå‡½æ•°
+	void OnRun(CELLThread* pThread)
 	{
-		while (true)
+		while (pThread->isRun())
 		{
-			//´Ó»º³åÇøÈ¡³öÊı¾İ
+			//ä»ç¼“å†²åŒºå–å‡ºæ•°æ®
 			if (!_tasksBuf.empty())
 			{
 				std::lock_guard<std::mutex> lock(_mutex);
@@ -70,22 +64,22 @@ protected:
 				}
 				_tasksBuf.clear();
 			}
-			//Èç¹ûÃ»ÓĞÈÎÎñ
+			//å¦‚æœæ²¡æœ‰ä»»åŠ¡
 			if (_tasks.empty())
 			{
 				std::chrono::milliseconds t(1);
 				std::this_thread::sleep_for(t);
 				continue;
 			}
-			//´¦ÀíÈÎÎñ
+			//å¤„ç†ä»»åŠ¡
 			for (auto pTask : _tasks)
 			{
-				pTask->doTask();
+				pTask();
 			}
-			//Çå¿ÕÈÎÎñ
+			//æ¸…ç©ºä»»åŠ¡
 			_tasks.clear();
 		}
-
+		printf("CELLTaskServer%d.OnRun exit\n", serverId);
 	}
 };
 #endif // !_CELL_TASK_H_

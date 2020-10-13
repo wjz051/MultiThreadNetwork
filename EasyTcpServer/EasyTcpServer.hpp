@@ -1,433 +1,33 @@
-#ifndef _EasyTcpServer_hpp_
+ï»¿#ifndef _EasyTcpServer_hpp_
 #define _EasyTcpServer_hpp_
 
-#ifdef _WIN32
-	#define FD_SETSIZE      2506
-	#define WIN32_LEAN_AND_MEAN
-	#define _WINSOCK_DEPRECATED_NO_WARNINGS
-	#include<windows.h>
-	#include<WinSock2.h>
-	#pragma comment(lib,"ws2_32.lib")
-#else
-	#include<unistd.h> //uni std
-	#include<arpa/inet.h>
-	#include<string.h>
+#include"CELL.hpp"
+#include"CELLClient.hpp"
+#include"CELLServer.hpp"
+#include"INetEvent.hpp"
 
-	#define SOCKET int
-	#define INVALID_SOCKET  (SOCKET)(~0)
-	#define SOCKET_ERROR            (-1)
-#endif
-
-#include<stdio.h>
-#include<vector>
-#include<map>
 #include<thread>
 #include<mutex>
 #include<atomic>
-#include<memory>
 
-#include"MessageHeader.hpp"
-#include"CELLTimestamp.hpp"
-#include"CELLTask.hpp"
-#include"CELLObjectPool.hpp"
 
-//»º³åÇø×îĞ¡µ¥Ôª´óĞ¡
-#ifndef RECV_BUFF_SZIE
-#define RECV_BUFF_SZIE 10240*5
-#define SEND_BUFF_SZIE RECV_BUFF_SZIE
-#endif // !RECV_BUFF_SZIE
-
-typedef std::shared_ptr<DataHeader> DataHeaderPtr;
-typedef std::shared_ptr<LoginResult> LoginResultPtr;
-
-//¿Í»§¶ËÊı¾İÀàĞÍ
-class ClientSocket :public ObjectPoolBase<ClientSocket,10000>
-{
-public:
-	ClientSocket(SOCKET sockfd = INVALID_SOCKET)
-	{
-		_sockfd = sockfd;
-		memset(_szMsgBuf, 0, RECV_BUFF_SZIE);
-		_lastPos = 0;
-
-		memset(_szSendBuf, 0, SEND_BUFF_SZIE);
-		_lastSendPos = 0;
-	}
-
-	SOCKET sockfd()
-	{
-		return _sockfd;
-	}
-
-	char* msgBuf()
-	{
-		return _szMsgBuf;
-	}
-
-	int getLastPos()
-	{
-		return _lastPos;
-	}
-	void setLastPos(int pos)
-	{
-		_lastPos = pos;
-	}
-
-	//·¢ËÍÊı¾İ
-	int SendData(DataHeaderPtr& header)
-	{
-		int ret = SOCKET_ERROR;
-		//Òª·¢ËÍµÄÊı¾İ³¤¶È
-		int nSendLen = header->dataLength;
-		//Òª·¢ËÍµÄÊı¾İ
-		const char* pSendData = (const char*)header.get();
-
-		while (true)
-		{
-			if (_lastSendPos + nSendLen >= SEND_BUFF_SZIE)
-			{
-				//¼ÆËã¿É¿½±´µÄÊı¾İ³¤¶È
-				int nCopyLen = SEND_BUFF_SZIE - _lastSendPos;
-				//¿½±´Êı¾İ
-				memcpy(_szSendBuf + _lastSendPos, pSendData, nCopyLen);
-				//¼ÆËãÊ£ÓàÊı¾İÎ»ÖÃ
-				pSendData += nCopyLen;
-				//¼ÆËãÊ£ÓàÊı¾İ³¤¶È
-				nSendLen -= nSendLen;
-				//·¢ËÍÊı¾İ
-				ret = send(_sockfd, _szSendBuf, SEND_BUFF_SZIE, 0);
-				//Êı¾İÎ²²¿Î»ÖÃÇåÁã
-				_lastSendPos = 0;
-				//·¢ËÍ´íÎó
-				if (SOCKET_ERROR == ret)
-				{
-					return ret;
-				}
-			}else {
-				//½«Òª·¢ËÍµÄÊı¾İ ¿½±´µ½·¢ËÍ»º³åÇøÎ²²¿
-				memcpy(_szSendBuf + _lastSendPos, pSendData, nSendLen);
-				//¼ÆËãÊı¾İÎ²²¿Î»ÖÃ
-				_lastSendPos += nSendLen;
-				break;
-			}
-		}
-		return ret;
-	}
-
-private:
-	// socket fd_set  file desc set
-	SOCKET _sockfd;
-	//µÚ¶ş»º³åÇø ÏûÏ¢»º³åÇø
-	char _szMsgBuf[RECV_BUFF_SZIE];
-	//ÏûÏ¢»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃ
-	int _lastPos;
-
-	//µÚ¶ş»º³åÇø ·¢ËÍ»º³åÇø
-	char _szSendBuf[SEND_BUFF_SZIE];
-	//·¢ËÍ»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃ
-	int _lastSendPos;
-};
-typedef std::shared_ptr<ClientSocket> ClientSocketPtr;
-
-class CellServer;
-//ÍøÂçÊÂ¼ş½Ó¿Ú
-class INetEvent
-{
-public:
-	//´¿Ğéº¯Êı
-	//¿Í»§¶Ë¼ÓÈëÊÂ¼ş
-	virtual void OnNetJoin(ClientSocketPtr& pClient) = 0;
-	//¿Í»§¶ËÀë¿ªÊÂ¼ş
-	virtual void OnNetLeave(ClientSocketPtr& pClient) = 0;
-	//¿Í»§¶ËÏûÏ¢ÊÂ¼ş
-	virtual void OnNetMsg(CellServer* pCellServer, ClientSocketPtr& pClient, DataHeader* header) = 0;
-	//recvÊÂ¼ş
-	virtual void OnNetRecv(ClientSocketPtr& pClient) = 0;
-private:
-
-};
-
-//ÍøÂçÏûÏ¢·¢ËÍÈÎÎñ
-class CellS2CTask:public CellTask
-{
-	ClientSocketPtr _pClient;
-	DataHeaderPtr _pHeader;
-public:
-	CellS2CTask(ClientSocketPtr& pClient, DataHeaderPtr& header)
-	{
-		_pClient = pClient;
-		_pHeader = header;
-	}
-
-	//Ö´ĞĞÈÎÎñ
-	void doTask()
-	{
-		_pClient->SendData(_pHeader);
-	}
-};
-typedef std::shared_ptr<CellS2CTask> CellS2CTaskPtr;
-
-//ÍøÂçÏûÏ¢½ÓÊÕ´¦Àí·şÎñÀà
-class CellServer
-{
-public:
-	CellServer(SOCKET sock = INVALID_SOCKET)
-	{
-		_sock = sock;
-		_pNetEvent = nullptr;
-	}
-
-	~CellServer()
-	{
-		Close();
-		_sock = INVALID_SOCKET;
-	}
-
-	void setEventObj(INetEvent* event)
-	{
-		_pNetEvent = event;
-	}
-
-	//¹Ø±ÕSocket
-	void Close()
-	{
-		if (_sock != INVALID_SOCKET)
-		{
-#ifdef _WIN32
-			for (auto iter : _clients)
-			{
-				closesocket(iter.second->sockfd());
-			}
-			//¹Ø±ÕÌ×½Ú×Öclosesocket
-			closesocket(_sock);
-#else
-			for (auto iter : _clients)
-			{
-				close(iter.second->sockfd());
-			}
-			//¹Ø±ÕÌ×½Ú×Öclosesocket
-			close(_sock);
-#endif
-			_clients.clear();
-		}
-	}
-
-	//ÊÇ·ñ¹¤×÷ÖĞ
-	bool isRun()
-	{
-		return _sock != INVALID_SOCKET;
-	}
-
-	//´¦ÀíÍøÂçÏûÏ¢
-	//±¸·İ¿Í»§socket fd_set
-	fd_set _fdRead_bak;
-	//¿Í»§ÁĞ±íÊÇ·ñÓĞ±ä»¯
-	bool _clients_change;
-	SOCKET _maxSock;
-	void OnRun()
-	{
-		_clients_change = true;
-		while (isRun())
-		{
-			if (!_clientsBuff.empty())
-			{//´Ó»º³å¶ÓÁĞÀïÈ¡³ö¿Í»§Êı¾İ
-				std::lock_guard<std::mutex> lock(_mutex);
-				for (auto pClient : _clientsBuff)
-				{
-					_clients[pClient->sockfd()] = pClient;
-				}
-				_clientsBuff.clear();
-				_clients_change = true;
-			}
-
-			//Èç¹ûÃ»ÓĞĞèÒª´¦ÀíµÄ¿Í»§¶Ë£¬¾ÍÌø¹ı
-			if (_clients.empty())
-			{
-				std::chrono::milliseconds t(1);
-				std::this_thread::sleep_for(t);
-				continue;
-			}
-
-			//²®¿ËÀûÌ×½Ó×Ö BSD socket
-			fd_set fdRead;//ÃèÊö·û£¨socket£© ¼¯ºÏ
-			//ÇåÀí¼¯ºÏ
-			FD_ZERO(&fdRead);
-			if (_clients_change)
-			{
-				_clients_change = false;
-				//½«ÃèÊö·û£¨socket£©¼ÓÈë¼¯ºÏ
-				_maxSock = _clients.begin()->second->sockfd();
-				for (auto iter : _clients)
-				{
-					FD_SET(iter.second->sockfd(), &fdRead);
-					if (_maxSock < iter.second->sockfd())
-					{
-						_maxSock = iter.second->sockfd();
-					}
-				}
-				memcpy(&_fdRead_bak, &fdRead, sizeof(fd_set));
-			}
-			else {
-				memcpy(&fdRead, &_fdRead_bak, sizeof(fd_set));
-			}
-
-			///nfds ÊÇÒ»¸öÕûÊıÖµ ÊÇÖ¸fd_set¼¯ºÏÖĞËùÓĞÃèÊö·û(socket)µÄ·¶Î§£¬¶ø²»ÊÇÊıÁ¿
-			///¼ÈÊÇËùÓĞÎÄ¼şÃèÊö·û×î´óÖµ+1 ÔÚWindowsÖĞÕâ¸ö²ÎÊı¿ÉÒÔĞ´0
-			int ret = select(_maxSock + 1, &fdRead, nullptr, nullptr, nullptr);
-			if (ret < 0)
-			{
-				printf("selectÈÎÎñ½áÊø¡£\n");
-				Close();
-				return;
-			}
-			else if (ret == 0)
-			{
-				continue;
-			}
-			
-#ifdef _WIN32
-			for (int n = 0; n < fdRead.fd_count; n++)
-			{
-				auto iter  = _clients.find(fdRead.fd_array[n]);
-				if (iter != _clients.end())
-				{
-					if (-1 == RecvData(iter->second))
-					{
-						if (_pNetEvent)
-							_pNetEvent->OnNetLeave(iter->second);
-						_clients_change = true;
-						_clients.erase(iter->first);
-					}
-				}else {
-					printf("error. if (iter != _clients.end())\n");
-				}
-
-			}
-#else
-			std::vector<ClientSocketPtr> temp;
-			for (auto iter : _clients)
-			{
-				if (FD_ISSET(iter.second->sockfd(), &fdRead))
-				{
-					if (-1 == RecvData(iter.second))
-					{
-						if (_pNetEvent)
-							_pNetEvent->OnNetLeave(iter.second);
-						_clients_change = false;
-						temp.push_back(iter.second);
-					}
-				}
-			}
-			for (auto pClient : temp)
-			{
-				_clients.erase(pClient->sockfd());
-			}
-#endif
-		}
-	}
-	//½ÓÊÕÊı¾İ ´¦ÀíÕ³°ü ²ğ·Ö°ü
-	int RecvData(ClientSocketPtr& pClient)
-	{
-
-		//½ÓÊÕ¿Í»§¶ËÊı¾İ
-		char* szRecv = pClient->msgBuf() + pClient->getLastPos();
-		int nLen = (int)recv(pClient->sockfd(), szRecv, (RECV_BUFF_SZIE)- pClient->getLastPos(), 0);
-		_pNetEvent->OnNetRecv(pClient);
-		//printf("nLen=%d\n", nLen);
-		if (nLen <= 0)
-		{
-			//printf("¿Í»§¶Ë<Socket=%d>ÒÑÍË³ö£¬ÈÎÎñ½áÊø¡£\n", pClient->sockfd());
-			return -1;
-		}
-		//½«ÊÕÈ¡µ½µÄÊı¾İ¿½±´µ½ÏûÏ¢»º³åÇø
-		//memcpy(pClient->msgBuf() + pClient->getLastPos(), _szRecv, nLen);
-		//ÏûÏ¢»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃºóÒÆ
-		pClient->setLastPos(pClient->getLastPos() + nLen);
-
-		//ÅĞ¶ÏÏûÏ¢»º³åÇøµÄÊı¾İ³¤¶È´óÓÚÏûÏ¢Í·DataHeader³¤¶È
-		while (pClient->getLastPos() >= sizeof(DataHeader))
-		{
-			//ÕâÊ±¾Í¿ÉÒÔÖªµÀµ±Ç°ÏûÏ¢µÄ³¤¶È
-			DataHeader* header = (DataHeader*)pClient->msgBuf();
-			//ÅĞ¶ÏÏûÏ¢»º³åÇøµÄÊı¾İ³¤¶È´óÓÚÏûÏ¢³¤¶È
-			if (pClient->getLastPos() >= header->dataLength)
-			{
-				//ÏûÏ¢»º³åÇøÊ£ÓàÎ´´¦ÀíÊı¾İµÄ³¤¶È
-				int nSize = pClient->getLastPos() - header->dataLength;
-				//´¦ÀíÍøÂçÏûÏ¢
-				OnNetMsg(pClient, header);
-				//½«ÏûÏ¢»º³åÇøÊ£ÓàÎ´´¦ÀíÊı¾İÇ°ÒÆ
-				memcpy(pClient->msgBuf(), pClient->msgBuf() + header->dataLength, nSize);
-				//ÏûÏ¢»º³åÇøµÄÊı¾İÎ²²¿Î»ÖÃÇ°ÒÆ
-				pClient->setLastPos(nSize);
-			}
-			else {
-				//ÏûÏ¢»º³åÇøÊ£ÓàÊı¾İ²»¹»Ò»ÌõÍêÕûÏûÏ¢
-				break;
-			}
-		}
-		return 0;
-	}
-
-	//ÏìÓ¦ÍøÂçÏûÏ¢
-	virtual void OnNetMsg(ClientSocketPtr& pClient, DataHeader* header)
-	{
-		_pNetEvent->OnNetMsg(this, pClient, header);
-	}
-
-	void addClient(ClientSocketPtr& pClient)
-	{
-		std::lock_guard<std::mutex> lock(_mutex);
-		//_mutex.lock();
-		_clientsBuff.push_back(pClient);
-		//_mutex.unlock();
-	}
-
-	void Start()
-	{
-		_thread = std::thread(std::mem_fn(&CellServer::OnRun), this);
-		_taskServer.Start();
-	}
-
-	size_t getClientCount()
-	{
-		return _clients.size() + _clientsBuff.size();
-	}
-
-	void addSendTask(ClientSocketPtr& pClient, DataHeaderPtr header)
-	{
-		auto task = std::make_shared<CellS2CTask>(pClient, header);
-		_taskServer.addTask((CellTaskPtr)task);
-	}
-private:
-	SOCKET _sock;
-	//ÕıÊ½¿Í»§¶ÓÁĞ
-	std::map<SOCKET,ClientSocketPtr> _clients;
-	//»º³å¿Í»§¶ÓÁĞ
-	std::vector<ClientSocketPtr> _clientsBuff;
-	//»º³å¶ÓÁĞµÄËø
-	std::mutex _mutex;
-	std::thread _thread;
-	//ÍøÂçÊÂ¼ş¶ÔÏó
-	INetEvent* _pNetEvent;
-	//
-	CellTaskServer _taskServer;
-};
-typedef std::shared_ptr<CellServer> CellServerPtr;
 class EasyTcpServer : public INetEvent
 {
 private:
-	SOCKET _sock;
-	//ÏûÏ¢´¦Àí¶ÔÏó£¬ÄÚ²¿»á´´½¨Ïß³Ì
-	std::vector<CellServerPtr> _cellServers;
-	//Ã¿ÃëÏûÏ¢¼ÆÊ±
+	//
+	CELLThread _thread;
+	//æ¶ˆæ¯å¤„ç†å¯¹è±¡ï¼Œå†…éƒ¨ä¼šåˆ›å»ºçº¿ç¨‹
+	std::vector<CELLServer*> _cellServers;
+	//æ¯ç§’æ¶ˆæ¯è®¡æ—¶
 	CELLTimestamp _tTime;
+	//
+	SOCKET _sock;
 protected:
-	//SOCKET recv¼ÆÊı
+	//SOCKET recvè®¡æ•°
 	std::atomic_int _recvCount;
-	//ÊÕµ½ÏûÏ¢¼ÆÊı
+	//æ”¶åˆ°æ¶ˆæ¯è®¡æ•°
 	std::atomic_int _msgCount;
-	//¿Í»§¶Ë¼ÆÊı
+	//å®¢æˆ·ç«¯è®¡æ•°
 	std::atomic_int _clientCount;
 public:
 	EasyTcpServer()
@@ -441,39 +41,46 @@ public:
 	{
 		Close();
 	}
-	//³õÊ¼»¯Socket
+	//åˆå§‹åŒ–Socket
 	SOCKET InitSocket()
 	{
 #ifdef _WIN32
-		//Æô¶¯Windows socket 2.x»·¾³
+		//å¯åŠ¨Windows socket 2.xç¯å¢ƒ
 		WORD ver = MAKEWORD(2, 2);
 		WSADATA dat;
 		WSAStartup(ver, &dat);
 #endif
+//
+#ifndef _WIN32
+		//if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+		//	return (1);
+		//å¿½ç•¥å¼‚å¸¸ä¿¡å·ï¼Œé»˜è®¤æƒ…å†µä¼šå¯¼è‡´è¿›ç¨‹ç»ˆæ­¢
+		signal(SIGPIPE, SIG_IGN);
+#endif
 		if (INVALID_SOCKET != _sock)
 		{
-			printf("<socket=%d>¹Ø±Õ¾ÉÁ¬½Ó...\n", (int)_sock);
+			printf("warning, initSocket close old socket<%d>...\n", (int)_sock);
 			Close();
 		}
 		_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (INVALID_SOCKET == _sock)
 		{
-			printf("´íÎó£¬½¨Á¢socketÊ§°Ü...\n");
+			printf("error, create socket failed...\n");
 		}
 		else {
-			printf("½¨Á¢socket=<%d>³É¹¦...\n", (int)_sock);
+			printf("create socket<%d> success...\n", (int)_sock);
 		}
 		return _sock;
 	}
 
-	//°ó¶¨IPºÍ¶Ë¿ÚºÅ
+	//ç»‘å®šIPå’Œç«¯å£å·
 	int Bind(const char* ip, unsigned short port)
 	{
 		//if (INVALID_SOCKET == _sock)
 		//{
 		//	InitSocket();
 		//}
-		// 2 bind °ó¶¨ÓÃÓÚ½ÓÊÜ¿Í»§¶ËÁ¬½ÓµÄÍøÂç¶Ë¿Ú
+		// 2 bind ç»‘å®šç”¨äºæ¥å—å®¢æˆ·ç«¯è¿æ¥çš„ç½‘ç»œç«¯å£
 		sockaddr_in _sin = {};
 		_sin.sin_family = AF_INET;
 		_sin.sin_port = htons(port);//host to net unsigned short
@@ -496,33 +103,33 @@ public:
 		int ret = bind(_sock, (sockaddr*)&_sin, sizeof(_sin));
 		if (SOCKET_ERROR == ret)
 		{
-			printf("´íÎó,°ó¶¨ÍøÂç¶Ë¿Ú<%d>Ê§°Ü...\n", port);
+			printf("error, bind port<%d> failed...\n", port);
 		}
 		else {
-			printf("°ó¶¨ÍøÂç¶Ë¿Ú<%d>³É¹¦...\n", port);
+			printf("bind port<%d> success...\n", port);
 		}
 		return ret;
 	}
 
-	//¼àÌı¶Ë¿ÚºÅ
+	//ç›‘å¬ç«¯å£å·
 	int Listen(int n)
 	{
-		// 3 listen ¼àÌıÍøÂç¶Ë¿Ú
+		// 3 listen ç›‘å¬ç½‘ç»œç«¯å£
 		int ret = listen(_sock, n);
 		if (SOCKET_ERROR == ret)
 		{
-			printf("socket=<%d>´íÎó,¼àÌıÍøÂç¶Ë¿ÚÊ§°Ü...\n",_sock);
+			printf("error, listen socket<%d> failed...\n",_sock);
 		}
 		else {
-			printf("socket=<%d>¼àÌıÍøÂç¶Ë¿Ú³É¹¦...\n", _sock);
+			printf("listen port<%d> success...\n", _sock);
 		}
 		return ret;
 	}
 
-	//½ÓÊÜ¿Í»§¶ËÁ¬½Ó
+	//æ¥å—å®¢æˆ·ç«¯è¿æ¥
 	SOCKET Accept()
 	{
-		// 4 accept µÈ´ı½ÓÊÜ¿Í»§¶ËÁ¬½Ó
+		// 4 accept ç­‰å¾…æ¥å—å®¢æˆ·ç«¯è¿æ¥
 		sockaddr_in clientAddr = {};
 		int nAddrLen = sizeof(sockaddr_in);
 		SOCKET cSock = INVALID_SOCKET;
@@ -533,138 +140,141 @@ public:
 #endif
 		if (INVALID_SOCKET == cSock)
 		{
-			printf("socket=<%d>´íÎó,½ÓÊÜµ½ÎŞĞ§¿Í»§¶ËSOCKET...\n", (int)_sock);
+			printf("error, accept INVALID_SOCKET...\n");
 		}
 		else
 		{
-			//½«ĞÂ¿Í»§¶Ë·ÖÅä¸ø¿Í»§ÊıÁ¿×îÉÙµÄcellServer
-			ClientSocketPtr c(new ClientSocket(cSock));
-			//addClientToCellServer(std::make_shared<ClientSocket>(cSock));
-			addClientToCellServer(c);
-			//»ñÈ¡IPµØÖ· inet_ntoa(clientAddr.sin_addr)
+			//å°†æ–°å®¢æˆ·ç«¯åˆ†é…ç»™å®¢æˆ·æ•°é‡æœ€å°‘çš„cellServer
+			addClientToCELLServer(new CELLClient(cSock));
+			//è·å–IPåœ°å€ inet_ntoa(clientAddr.sin_addr)
 		}
 		return cSock;
 	}
 	
-	void addClientToCellServer(ClientSocketPtr& pClient)
+	void addClientToCELLServer(CELLClient* pClient)
 	{
-		//²éÕÒ¿Í»§ÊıÁ¿×îÉÙµÄCellServerÏûÏ¢´¦Àí¶ÔÏó
+		//æŸ¥æ‰¾å®¢æˆ·æ•°é‡æœ€å°‘çš„CELLServeræ¶ˆæ¯å¤„ç†å¯¹è±¡
 		auto pMinServer = _cellServers[0];
-		for(auto pCellServer : _cellServers)
+		for(auto pServer : _cellServers)
 		{
-			if (pMinServer->getClientCount() > pCellServer->getClientCount())
+			if (pMinServer->getClientCount() > pServer->getClientCount())
 			{
-				pMinServer = pCellServer;
+				pMinServer = pServer;
 			}
 		}
 		pMinServer->addClient(pClient);
-		OnNetJoin(pClient);
 	}
 
-	void Start(int nCellServer)
+	void Start(int nCELLServer)
 	{
-		for (int n = 0; n < nCellServer; n++)
+		for (int n = 0; n < nCELLServer; n++)
 		{
-			auto ser = std::make_shared<CellServer>(_sock);
+			auto ser = new CELLServer(n+1);
 			_cellServers.push_back(ser);
-			//×¢²áÍøÂçÊÂ¼ş½ÓÊÜ¶ÔÏó
+			//æ³¨å†Œç½‘ç»œäº‹ä»¶æ¥å—å¯¹è±¡
 			ser->setEventObj(this);
-			//Æô¶¯ÏûÏ¢´¦ÀíÏß³Ì
+			//å¯åŠ¨æ¶ˆæ¯å¤„ç†çº¿ç¨‹
 			ser->Start();
 		}
+		_thread.Start(nullptr,
+			[this](CELLThread* pThread) {
+				OnRun(pThread);
+			});
 	}
-	//¹Ø±ÕSocket
+	//å…³é—­Socket
 	void Close()
 	{
+		printf("EasyTcpServer.Close begin\n");
+		_thread.Close();
 		if (_sock != INVALID_SOCKET)
 		{
+			for (auto s : _cellServers)
+			{
+				delete s;
+			}
+			_cellServers.clear();
+			//å…³é—­å¥—èŠ‚å­—socket
 #ifdef _WIN32
-			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			closesocket(_sock);
-			//------------
-			//Çå³ıWindows socket»·¾³
+			//æ¸…é™¤Windows socketç¯å¢ƒ
 			WSACleanup();
 #else
-			//¹Ø±ÕÌ×½Ú×Öclosesocket
 			close(_sock);
 #endif
+			_sock = INVALID_SOCKET;
 		}
+		printf("EasyTcpServer.Close end\n");
 	}
-	//´¦ÀíÍøÂçÏûÏ¢
-	bool OnRun()
+
+	//cellServer 4 å¤šä¸ªçº¿ç¨‹è§¦å‘ ä¸å®‰å…¨
+	//å¦‚æœåªå¼€å¯1ä¸ªcellServerå°±æ˜¯å®‰å…¨çš„
+	virtual void OnNetJoin(CELLClient* pClient)
 	{
-		if (isRun())
+		_clientCount++;
+		//printf("client<%d> join\n", pClient->sockfd());
+	}
+	//cellServer 4 å¤šä¸ªçº¿ç¨‹è§¦å‘ ä¸å®‰å…¨
+	//å¦‚æœåªå¼€å¯1ä¸ªcellServerå°±æ˜¯å®‰å…¨çš„
+	virtual void OnNetLeave(CELLClient* pClient)
+	{
+		_clientCount--;
+		//printf("client<%d> leave\n", pClient->sockfd());
+	}
+	//cellServer 4 å¤šä¸ªçº¿ç¨‹è§¦å‘ ä¸å®‰å…¨
+	//å¦‚æœåªå¼€å¯1ä¸ªcellServerå°±æ˜¯å®‰å…¨çš„
+	virtual void OnNetMsg(CELLServer* pServer, CELLClient* pClient, netmsg_DataHeader* header)
+	{
+		_msgCount++;
+	}
+
+	virtual void OnNetRecv(CELLClient* pClient)
+	{
+		_recvCount++;
+		//printf("client<%d> leave\n", pClient->sockfd());
+	}
+private:
+	//å¤„ç†ç½‘ç»œæ¶ˆæ¯
+	void OnRun(CELLThread* pThread)
+	{
+		while (pThread->isRun())
 		{
 			time4msg();
-			//²®¿ËÀûÌ×½Ó×Ö BSD socket
-			fd_set fdRead;//ÃèÊö·û£¨socket£© ¼¯ºÏ
-			//ÇåÀí¼¯ºÏ
+			//ä¼¯å…‹åˆ©å¥—æ¥å­— BSD socket
+			fd_set fdRead;//æè¿°ç¬¦ï¼ˆsocketï¼‰ é›†åˆ
+						  //æ¸…ç†é›†åˆ
 			FD_ZERO(&fdRead);
-			//½«ÃèÊö·û£¨socket£©¼ÓÈë¼¯ºÏ
+			//å°†æè¿°ç¬¦ï¼ˆsocketï¼‰åŠ å…¥é›†åˆ
 			FD_SET(_sock, &fdRead);
-			///nfds ÊÇÒ»¸öÕûÊıÖµ ÊÇÖ¸fd_set¼¯ºÏÖĞËùÓĞÃèÊö·û(socket)µÄ·¶Î§£¬¶ø²»ÊÇÊıÁ¿
-			///¼ÈÊÇËùÓĞÎÄ¼şÃèÊö·û×î´óÖµ+1 ÔÚWindowsÖĞÕâ¸ö²ÎÊı¿ÉÒÔĞ´0
-			timeval t = { 0,10};
+			///nfds æ˜¯ä¸€ä¸ªæ•´æ•°å€¼ æ˜¯æŒ‡fd_seté›†åˆä¸­æ‰€æœ‰æè¿°ç¬¦(socket)çš„èŒƒå›´ï¼Œè€Œä¸æ˜¯æ•°é‡
+			///æ—¢æ˜¯æ‰€æœ‰æ–‡ä»¶æè¿°ç¬¦æœ€å¤§å€¼+1 åœ¨Windowsä¸­è¿™ä¸ªå‚æ•°å¯ä»¥å†™0
+			timeval t = { 0, 1};
 			int ret = select(_sock + 1, &fdRead, 0, 0, &t); //
 			if (ret < 0)
 			{
-				printf("Accept SelectÈÎÎñ½áÊø¡£\n");
-				Close();
-				return false;
+				printf("EasyTcpServer.OnRun select exit.\n");
+				pThread->Exit();
+				break;
 			}
-			//ÅĞ¶ÏÃèÊö·û£¨socket£©ÊÇ·ñÔÚ¼¯ºÏÖĞ
+			//åˆ¤æ–­æè¿°ç¬¦ï¼ˆsocketï¼‰æ˜¯å¦åœ¨é›†åˆä¸­
 			if (FD_ISSET(_sock, &fdRead))
 			{
 				FD_CLR(_sock, &fdRead);
 				Accept();
-				return true;
 			}
-			return true;
 		}
-		return false;
-	}
-	//ÊÇ·ñ¹¤×÷ÖĞ
-	bool isRun()
-	{
-		return _sock != INVALID_SOCKET;
 	}
 
-	//¼ÆËã²¢Êä³öÃ¿ÃëÊÕµ½µÄÍøÂçÏûÏ¢
+	//è®¡ç®—å¹¶è¾“å‡ºæ¯ç§’æ”¶åˆ°çš„ç½‘ç»œæ¶ˆæ¯
 	void time4msg()
 	{
 		auto t1 = _tTime.getElapsedSecond();
 		if (t1 >= 1.0)
 		{
-			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recv<%d>,msg<%d>\n", _cellServers.size(), t1, _sock,(int)_clientCount, (int)(_recvCount/ t1), (int)(_msgCount / t1));
+			printf("thread<%d>,time<%lf>,socket<%d>,clients<%d>,recv<%d>,msg<%d>\n", (int)_cellServers.size(), t1, _sock, (int)_clientCount, (int)(_recvCount / t1), (int)(_msgCount / t1));
 			_recvCount = 0;
 			_msgCount = 0;
 			_tTime.update();
 		}
-	}
-	//Ö»»á±»Ò»¸öÏß³Ì´¥·¢ °²È«
-	virtual void OnNetJoin(ClientSocketPtr& pClient)
-	{
-		_clientCount++;
-		//printf("client<%d> join\n", pClient->sockfd());
-	}
-	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
-	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
-	virtual void OnNetLeave(ClientSocketPtr& pClient)
-	{
-		_clientCount--;
-		//printf("client<%d> leave\n", pClient->sockfd());
-	}
-	//cellServer 4 ¶à¸öÏß³Ì´¥·¢ ²»°²È«
-	//Èç¹ûÖ»¿ªÆô1¸öcellServer¾ÍÊÇ°²È«µÄ
-	virtual void OnNetMsg(CellServer* pCellServer, ClientSocketPtr& pClient, DataHeader* header)
-	{
-		_msgCount++;
-	}
-
-	virtual void OnNetRecv(ClientSocketPtr& pClient)
-	{
-		_recvCount++;
-		//printf("client<%d> leave\n", pClient->sockfd());
 	}
 };
 
